@@ -9,6 +9,8 @@ output:
     toc: yes
 ---
 
+[The RStudio project for this document lives at XXX.]
+
 Syuzhet
 =======
 
@@ -778,4 +780,4 @@ After going through this journey of adventure and discovery, I have come to the 
 
 The bottom line overall is that things like Syuzhet are fun and cool and one shouldn't get too hung up on the sinusoid and periodic nature of life in the frequency domain. Don't throw the baby out with the bathwater unless you're sure the baby is defective and the bathwater contaminated.
 
-
+The source for this document is on github at XXX. I'm going to be submitting a pull request for Syuzhet as soon as I get this thing posted.
