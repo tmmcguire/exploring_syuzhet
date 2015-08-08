@@ -1,0 +1,781 @@
+---
+title: "Exploring Syuzhet"
+author: "Tommy M. McGuire"
+date: "08/06/2015"
+output:
+  html_document:
+    self_contained: no
+    smart: no
+    toc: yes
+---
+
+Syuzhet
+=======
+
+Last year, Matthew Jockers published ["A Novel Method for Detecting Plot"](http://www.matthewjockers.net/2014/06/05/a-novel-method-for-detecting-plot/), which caused a suitably flamboyant reaction particularly when he wrote ["Revealing Sentiment and Plot Arcs with the Syuzhet Package"](http://www.matthewjockers.net/2015/02/02/syuzhet/) and said that he "measured and compared 40,000+ plot shapes and then clustered the resulting data in order to reveal six common, perhaps archetypal, plot shapes".
+The post ["The Rest of the Story"](http://www.matthewjockers.net/2015/02/25/the-rest-of-the-story/) describes the six shapes.
+
+His comments, and the package, when he [published it on github](https://github.com/mjockers/syuzhet), drew a significant 
+amount of criticism on a number of levels from the basic techniques it uses to produce raw data from texts to the 
+techniques it uses to analyze the data.
+In fact, Jockers seems to have thrown in the towel with
+["Requiem for a low pass filter"](http://www.matthewjockers.net/2015/04/06/epilogue/) where he wrote,
+"I’m not entirely ready to concede that Fourier is useless for the larger problem,
+but [Ben Schmidt and Scott Enderle, presumably along with another major player in the conversation, Annie Swafford]
+have convinced me that a better solution than the low pass is possible and probably warranted."
+
+I admit that I myself have exactly no standing to say so, but I think that the basic approach is sound and the specific techniques are good in general, even if some parts are a little sketchy. (And, hey, sketchy isn't all bad.)
+
+So let me start with some disclaimers: I am not a digital signal processing guy. I'm not even a mathematician who looks like a DSP guy. I'm a computer programmer and all my math is discrete. I'm also a systems administrator, systems programmer and networking guy; I've never done any numerical work and I try to avoid floating point numbers if at all possible. But I've spent the last week or so reading up on DSP, so there's that, right?
+
+Anyway, the best reference I have found so far is
+*[The Scientist and Engineer's Guide to Digital Signal Processing](http://www.dspguide.com/)* by Steven W. Smith.
+*[Think DSP](http://greenteapress.com/thinkdsp/)*, by Allen B. Downey, is another text I'm looking at;
+his *[Think Complexity](http://greenteapress.com/complexity/index.html)* was pretty good. (To tell the truth, I like *The Scientist and Engineer's Guide* because it's the only one I have found that makes any damn sense. Of course, it did take me four semesters to get through the two semester calculus requirement as an undergrad. (But, as I tell my engineer friend, I'll happily accept mockery about that if you can tell me why Pseudo-Scotus was important. How about diagonalization, huh? Thought not.) But that's enough ranting for now.)
+
+How does Syuzhet work?
+----------------------
+
+["Syuzhet"](https://en.wikipedia.org/wiki/Fabula_and_syuzhet) is a common term in literary analysis, from the Russian word сюжет meaning roughly, "I feel very smart when I use obscure terms"; it is counterpoised against the term "fabula", which refers approximately to, "the outer and smaller of the two bones in the leg between the knee and the ankle". Syuzhet, in any case, refers to the organization of the story itself, as opposed to the sequence of the events in the story; Jockers loosely associates it with "plot" and more precisely to the sequence of emotional affects the story contains.
+
+For current usage here, syuzhet is an R package written by Jockers that uses Fourier analysis to extract a simple, linear description of the "plot" of a text from the text itself.
+
+In broad terms, syuzhet (the package)
+
+1. Parses the source text into sentences.
+2. Uses off-the-shelf sentiment analysis tools to establish the emotional valence (positive or negative) of the each sentence.
+3. Applies a [Discrete Fourier transform](https://en.wikipedia.org/wiki/Discrete_Fourier_transform) to move from the sequence of emotional values in the time domain to a frequency domain: a list of coefficients of sine waves of precisely varying frequencies (yeah, I know I'm over simplifying that) that when added produces the original values.
+4. Uses a low-pass filter to remove the higher-frequency components, in order to simplify the resulting graph. (You knew there was a graph here somewhere, didn't you?)
+5. Reverses the Fourier transform to produce a sequence of values of *something* that represents the time-varying structure of the text.
+
+Now, as I mentioned before, I am neither a digital humanist nor a signal processing guy, so as I said I don't actually know what I'm talking about, but that sounds to me like (a) a very interesting and possibly novel approach for analyzing the large-scale structure of a text (and, by the way, for comparing different texts) and (b) no less valid than anything else that goes on around here. Certainly, the data from the sentiment analysis is a sequence of samples in a time series, and the DFT is dandy tool for analyzing those, right?
+
+A simple, validating example
+----------------------------
+
+To start off with, I am using [RStudio](https://www.rstudio.com/) 0.98.1103, which is brilliant, although I seem to be having some minor difficulties with it. (I apologize for any spelling errors; I'm getting an "invalid or incomplete multibyte or wide character" error somewhere in the document when I run the spell checker.) I went to the [syuzhet](https://github.com/mjockers/syuzhet) github page and followed the installation instructions:
+
+```
+# install.packages("devtools")
+devtools::install_github("mjockers/syuzhet")
+```
+
+The syuzhet package is also available from [CRAN](https://cran.r-project.org/web/packages/syuzhet/index.html), which links to the [reference manual](https://cran.r-project.org/web/packages/syuzhet/syuzhet.pdf)[PDF] and the [Introduction to the Syuzhet Package](https://cran.r-project.org/web/packages/syuzhet/vignettes/syuzhet-vignette.html). That last is the basic guide I am using.
+
+```{r}
+library(syuzhet)
+```
+
+I downloaded a plain text copy of James Joyce's *A Portrait of the Artist as a Young Man* from [Project Gutenberg](http://www.gutenberg.org/ebooks/4217) and trimmed off the Project Gutenberg header and footer.
+
+```{r}
+portrait.string <- get_text_as_string('A_Portrait.txt')
+```
+
+The next step is to convert the text into a vector of sentences. I used the strip_quotes argument as I understand from some of the blog posts that the OpenNLP sentence parser has difficulties with quoted text.
+
+```{r}
+portrait.sentences <- get_sentences(portrait.string, strip_quotes = TRUE)
+str(portrait.sentences)
+```
+
+The next step is to compute the sentiment values for each sentence.
+
+```{r}
+portrait.sentiment <- get_sentiment(portrait.sentences, method="bing")
+plot(portrait.sentiment, type = "l",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional Valence")
+```
+
+The result looks eerily similar to the examples from Jockers' posts, so I seem to be doing something right here. (I am somewhat new to R, as well.) 
+
+So, what happens with the whole DFT thing?
+
+```{r}
+portrait.values <- get_transformed_values(portrait.sentiment, scale_vals = TRUE)
+plot(portrait.values, type="h",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+```
+
+And again, that looks roughly like the results from Jockers. Yay!
+
+There are a few interesting parameters to `get_transformed_values`: 
+
+* `low_pass_size`, determining the number of frequencies to keep (3 by default),
+* `scale_vals`, whether or not to normalize the values using R's `scale`, and
+* `scale_range`, whether or not to scale the values from -1 to +1.
+
+Let's take a look at the effects of the last two (note that apparently they cannot both be true). First, note that the graph above was produced with `scale_vals`=TRUE, which replicates Jockers' graphs.
+
+```{r}
+portrait.values <- get_transformed_values(portrait.sentiment, scale_vals = FALSE)
+
+```
+
+```{r, echo=FALSE}
+plot(portrait.values, type="h",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="scale_vals=FALSE, scale_range=FALSE")
+```
+
+That seems weirdly negative. No wonder I had a hard time getting into the book. (I wonder if the comments on Syuzhet would have been different if Jockers had been using that version of the graph?)
+
+```{r}
+portrait.values <- get_transformed_values(portrait.sentiment, scale_range = TRUE)
+```
+
+```{r, echo=FALSE}
+plot(portrait.values, type="h",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="scale_range = TRUE")
+```
+
+That is similar to the original, but scaled to be between -1 and 1. Those parameters affect the Y-axis location of the graph rather than its shape.
+
+At this point, I'm not entirely happy with the "shading" effect of "h" for the plot type; I think it overemphasizes the baseline. I'll just use "l" for a while.
+
+One of the major complaints about the work is that the `low_pass` parameter is 3, which does emphasize Jockers' goal of reducing the plot to a very simple structure but produces artifacts like the excessivly positive peaks towards the beginning and end of *A Portrait*. Adding a few more frequencies adjusts those artifacts, to an extent.
+
+```{r}
+portrait.values.5 <- get_transformed_values(portrait.sentiment, scale_range = TRUE, low_pass_size = 5)
+```
+
+```{r, echo=FALSE}
+plot(portrait.values.5, type="l",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="low_pass_size=5")
+```
+
+A `low_pass_size` of 5 smooths the early and late bumps into some wobbliness.
+
+```{r}
+portrait.values.10 <- get_transformed_values(portrait.sentiment, scale_range = TRUE, low_pass_size = 10)
+```
+
+```{r, echo=FALSE}
+plot(portrait.values.10, type="l",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="low_pass_size=10")
+```
+
+And 10 produces much wobbliness.
+
+```{r}
+portrait.values.20 <- get_transformed_values(portrait.sentiment, scale_range = TRUE, low_pass_size = 20)
+```
+
+```{r, echo=FALSE}
+plot(portrait.values.20, type="l",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="low_pass_size=20")
+```
+
+20, however, starts getting back to the original jaggedness of the data.
+
+```{r}
+portrait.values.100 <- get_transformed_values(portrait.sentiment, scale_range = TRUE, low_pass_size = 100)
+```
+
+```{r, echo=FALSE}
+plot(portrait.values.100, type="l",
+     main="A Portrait of the Artist as a Young Man",
+     xlab="Narrative time",
+     ylab="Emotional valence")
+title(main="A Portrait of the Artist as a Young Man", sub="low_pass_size=100")
+```
+
+And 100 is beginning to look like a fair reproduction of the original data.
+
+So far, so good. I have syuzhet working as intended, I think.
+
+So, what color are its guts?
+----------------------------
+
+(That's an obscure *Howard the Duck* reference, for those of you who lack cultural context data.)
+
+Inside the syuzhet package, this is the `get_transformed_values` function:
+
+```{r, eval=FALSE}
+get_transformed_values <- function(raw_values,
+                                   low_pass_size = 3,
+                                   x_reverse_len = 100,
+                                   scale_vals = FALSE,
+                                   scale_range = FALSE){
+  if(!is.numeric(raw_values)) stop("Input must be an numeric vector")
+  if(low_pass_size > length(raw_values)) stop("low_pass_size ... length of raw_values input vector")
+  values_fft <- fft(raw_values)
+  keepers <- values_fft[1:low_pass_size]
+  padded_keepers <- c(keepers, rep(0, x_reverse_len - low_pass_size))
+  inverse_values <- fft(padded_keepers, inverse=T)
+  transformed_values <- Re(inverse_values)
+  if(scale_vals & scale_range) stop("ERROR: scale_vals and scale_range cannot both be true.")
+  if(scale_vals){
+    return(scale(transformed_values))
+  } else if(scale_range & !scale_vals) {
+    return(rescale(transformed_values))
+  } else {
+    return(transformed_values)
+  }
+}
+```
+
+From the looks of things, `values_fft` are the Fourier coefficients for the frequency domain, `keepers` are the coefficients after the low-pass filter is applied, `padded_keepers` ensures the coefficients have the size needed for the result, `inverse_values` is the result transformed back into the time domain, but still as complex numbers because `transformed_values` is just the real part of each.
+
+Let's find out.
+
+```{r}
+portrait.fft <- fft(portrait.sentiment)
+str(portrait.fft)
+```
+
+Yep, that's a vector of complex numbers.
+
+Here are real parts:
+
+```{r}
+plot(Re(portrait.fft), type="h", ylab="Real comp.")
+```
+
+And here are the imaginary parts:
+
+```{r}
+plot(Im(portrait.fft), type="h", ylab="Imaginary comp.")
+```
+
+The normal way of looking at complex numbers is as a (real,imaginary) pair, an equation like $4 + 3i$, where $i$ is the square root of -1.
+
+An alternative, and frequently better, way of looking at them is in polar notation. If you think of a complex number as living on the the complex plane, an extension of the real number line, then the complex number describes a point on the plane; the real component is the x-value and the imaginary component is the y-value, say. But the alternative way of looking at the same number using polar notation, describes the point as a distance from a central point and an angle from a specific ray leaving that central point. From my understanding, for complex numbers the center is (0,0) on the complex plane, and the specific ray is the positive real axis.
+
+Here is a plot of the magnitudes and phases of the fft values:
+
+```{r}
+par(mfrow=c(2,1))
+plot(Mod(portrait.fft), type="h", ylab="Magnitude (modulus)", xlab="Frequency (?)")
+plot(Arg(portrait.fft), type="h", ylab="Phase (argument)", xlab="Frequency")
+par(mfrow=c(1,1))
+```
+
+Note that the phases range from -π to π ("-pi" to "pi").
+
+One problem with `get_transformed_values` is that, according to R's fft documentation, "If `inverse` is `TRUE`, the (unnormalized) inverse Fourier transform is returned, i.e., if `y <- fft(z)`, then `z` is `fft(y, inverse = TRUE) / length(y)`." In other words, the values should be (?) normalized in the frequency domain to reproduce the time domain signal. I have done that below.
+
+```{r}
+portrait.inverse <- fft(portrait.fft,inverse = TRUE) / length(portrait.fft)
+```
+
+Anyway, if all of this works, `portrait.inverse`, the result of inverting the FFT, should be very similar to `portrait.sentiment`, given that nothing has been done to the data in the frequency domain.
+
+```{r, echo=FALSE}
+plot(Re(portrait.inverse), type="l", ylab="Real", xlab="Time", main="portrait.inverse")
+```
+
+That seems to be the case, at least according to the real components. On the other hand, the imaginary components are pretty small.
+
+```{r}
+plot(Im(portrait.inverse), type="l", ylab="Imaginary", xlab="Time")
+```
+
+`Im(portrait.inverse)`'s maxima and minima are `r max(Im(portrait.inverse))` and `r min(Im(portrait.inverse))`, respectively. That does make the line `transformed_values <- Re(inverse_values)` seem a little less questionable, 
+since the imaginary parts are approximating zero. The fact that some are non-zero is probably the result of floating point goofiness.
+
+(As an aside, I am violating the McGuire Dictum of Numeric Processing here:
+
+**Dictum 1: NO ONE WHO HAS NOT HAD A NUMERICAL METHODS COURSE SHOULD BE ABLE TO TOUCH A FLOATING-POINT NUMBER.**
+
+I have not had one, but I'm touching them, oh, I'm so touching them. (Poke, poke. "I'm not bothering you, am I?"))
+
+Anyway, comparing the original signal to the inverse signal does look right, modulo some floating point loss of precision.
+
+```{r}
+plot(portrait.sentiment, type="h", col="black", ylab="Emotion", xlab="Time")
+lines(Re(portrait.inverse), type="h", col="yellow")
+legend("topleft", c("Original data", "Recovered data"), col=c("black", "yellow"), cex=.75, lty=1)
+```
+
+Going back to the frequency domain data, `portrait.fft`, you may notice there that the real parts look strangely symmetric. (The imaginary parts, too, but it is harder to see.) This is because of the structure of the result of the `fft`. A call to `fft` with an array of real values produces a similar sized array of complex values with two copies of the spectrum information: one copy of the information for positive frequencies and a second copy for negative frequencies. Or something like that. 
+
+The first value in the array, for a frequency of 0, is special, since it is the amplitude of a cosine wave of frequency 0;
+a constant value.
+The elements 2 through N/2 are the amplitude/phase of waves with positive frequency starting with 1. Elements N/2 through N are the amplitude/phase of waves with negative frequency, ending with 1. The last half should logically precede the first, but doesn't. So there. Anyway, the second half are the complex conjugates of the first half, reversed.
+
+```{r}
+par(mfrow=c(3,1))
+plot(Re(portrait.fft)[2:(length(portrait.fft)/2)], type="h", main="Real components, 2..N/2",ylab="", xlab="", yaxt="n")
+plot(Re(portrait.fft)[(length(portrait.fft)/2):(length(portrait.fft))],
+     type="h", main="Real components, N/2..N", ylab="", xlab="", yaxt="n")
+plot(
+  rev(Re(Conj(portrait.fft))[(length(portrait.fft)/2):(length(portrait.fft))]),
+     type="h", main="Real components of the complex conjugates, N/2..N, reversed", ylab="", xlab="", yaxt="n")
+par(mfrow=c(1,1))
+```
+
+Most of the vectors involved in signal processing are treated as periodic signals; in other words, they are treated as if the right-most, final element were immediately followed by the left-most, beginning element of the next copy of the vector in a series. It is sometimes convenient to have a way to rotate a vector so that the current element 1 is the midpoint.
+
+```{r}
+rotate_values <- function(data) {
+  length <- length(data)
+  mid <- ceiling(length / 2)
+  c(data[(mid+1):length], data[1:mid])
+}
+```
+
+Applying this to the real components of `portrait_fft` produces the following graph and showing the symmetry:
+
+```{r, echo=FALSE}
+plot(Re(rotate_values(portrait.fft)), type="h", ylab="Real", yaxt="n", xaxt="n", xlab="Frequency")
+```
+
+A similar display of the imaginary values doesn't have the same symmetry; remember that the points to the left are the complex conjugates of those on the right; this flips them vertically.
+
+```{r, echo=FALSE}
+plot(Im(rotate_values(portrait.fft)), type="h", ylab="Imaginary", yaxt="n", xaxt="n", xlab="Frequency")
+```
+
+In any case, the structure of the result of `fft` brings up another problem in `get_transformed_values`: zeroing all of the values from `low_pass_size` to the end does not maintain this property. As a result, I'm told, the final inverse may not be real; i.e. it may have non-trivial non-zero imaginary components. I haven't seen any particulary bad examples, but still. (This gets more important later, as I start mashing on things myself, so it is an important invariant to maintain.)
+
+Finally, here are the amplitudes of the frequencies of *A Portrait of the Artist as a Young Man*, using the magnitude of the appropriate polar coordinates of `portrait.fft`.
+
+```{r}
+plot(Mod(portrait.fft[1:(length(portrait.fft)/2)]), type="h", ylab="Amplitude", xlab="Frequency")
+```
+
+Zooming in a bit on the lower frequencies, and skipping the frequency 0 element,...
+
+```{r, echo=FALSE}
+plot(Mod(portrait.fft[2:(length(portrait.fft)/2)][1:200]), type="h", ylab="Amplitude", xlab="Frequency")
+```
+
+The biggest amplitudes are at low frequencies, but some (or many, depending on how you look at it) higher frequencies also have significant amplitudes. The left-most column is of frequency 1: it makes one peak-to-trough-to-peak cycle in the length of `portrait.sentiment`. (I'm simplifying there; the phase value specifies *where* in the waveform the wave starts in the sample; it may be trough-to-peak-to-trough or some other form) The next column is of frequency 2: two cycles in the length of the input. The third column is of frequency 3: three cycles, and so forth. The right-most column is the highest frequency, which (because the data is one sentence per sample) is one cycle per two sentences (and there's the Nyquist limit).
+
+One other point to make is that if the filter in the frequency domain adds up to something other than 1, the result is gain or loss. Less than one dials the amplitude down, greater than one dials it up. The filter `c(1,1,1,0,...)` produces a strong gain; I do not know if this is desired or not. For me, however, I am a big fan of not doing anything that isn't specifically needed (actually, I'm a big fan of not doing anything at all), so the filter should probably be normalized to sum to one.
+
+Where does all this leave us?
+-----------------------------
+
+Here is an updated version of `get_transformed_values`, to fix the (very) minor issues I found so far.
+
+```{r}
+get_transformed_values2 <- function(raw_values,
+                                   low_pass_size = 3,
+                                   x_reverse_len = 100,
+                                   scale_vals = FALSE,
+                                   scale_range = FALSE){
+  if(!is.numeric(raw_values)) stop("Input must be an numeric vector")
+  if(low_pass_size > length(raw_values)) stop("low_pass_size ... length of raw_values input vector")
+  # Normalization factor
+  values_fft <- fft(raw_values) / length(raw_values)
+  # Avoid gain/loss
+  keepers <- values_fft[1:low_pass_size] / low_pass_size
+  # Preserve frequency domain structure
+  padded_keepers <- c(keepers, rep(0, x_reverse_len - (2*low_pass_size) + 1), rev(Conj( keepers[2:(length(keepers))] )))
+  inverse_values <- fft(padded_keepers, inverse=T)
+  transformed_values <- Re(inverse_values)
+  if(scale_vals & scale_range) stop("ERROR: scale_vals and scale_range cannot both be true.")
+  if(scale_vals){
+    return(scale(transformed_values))
+  } else if(scale_range & !scale_vals) {
+    return(rescale(transformed_values))
+  } else {
+    return(transformed_values)
+  }
+}
+```
+
+The results of this function are pretty close the same as those of the original.
+Like I said, the changes are relatively minor.
+
+```{r}
+plot(syuzhet::get_transformed_values(portrait.sentiment,scale_range=T),
+     type="l", col="black", ylab="Emotional valence", xlab="Time")
+lines(get_transformed_values2(portrait.sentiment, scale_range=T), type="l", col="red")
+```
+
+One thing that still bothers me about this function is the `padded_keepers` line. I do not have *any* justification for doing that in order to adjust the length of the result vector. And, as it turns out, if `padded_keepers` does not have the same number of elements as `raw_values`, the scaling on the `inverse_values` line does not return the result to the same scale as the original data. It's doing something, but I do not understand what.
+
+The Big problem
+----------------
+
+Here is another example text, *Madame Bovary*.
+
+```{r}
+bovary.string <- get_text_as_string("Madame Bovary.txt")
+bovary.sentiment <- get_sentiment(get_sentences(bovary.string,strip_quotes=T))
+plot(bovary.sentiment, type="l", col="grey", main="Madame Bovary", ylab="Emotional Valence", xlab="Plot Time")
+lines(scale(filter(bovary.sentiment,filter=rep(1/501,501),sides=2)), type="l", col="red")
+lines(get_transformed_values2(bovary.sentiment, x_reverse_len=length(bovary.sentiment), scale_vals=T),
+      type="l", col="blue")
+legend("topleft", c("501 sample moving average", "Syuzhet"), col=c("red", "blue"), cex=.75, lty=1)
+```
+
+This thing is what we in the business like to call a *problem*. According to the moving average and people who have read the book, *Bovary* does not have a cheery, upbeat ending. The moving average has its ups and downs, but it is generally declining from left to right. On the other hand, the Syuzhet curve is simply wrong. Notice that the right end of the Syuzhet curve bends upward. In fact, it rises to the same level of the curve on the left edge.
+
+The Syuzhet curve has to meet at left and right, by the manner that the Fourier transform treats its data. The input of the transform and output of the inverse transform are assumed to be periodic repeating, so in effect the right edge of the graph should be followed immediately by the left edge of a subsequent, identical graph. (*Bovary* is one of the best examples I found of this sort of behavior, but much of the discussion of Syuzhet focused on similar behaviors in other books, including *Portrait*.)
+
+The specific problem seems to go by the name of a "circular convolution artifact" or "time aliasing", rather than the more general "ringing" which may be related but was the term under which most of the discussion of the behavior of the DFT occurred.
+
+Everyone likes factoids, right? I like factoids. Here is the [**Primary Factoid of Digital Signal Processing**](https://en.wikipedia.org/wiki/Convolution_theorem):
+
+**A [convolution](https://en.wikipedia.org/wiki/Convolution) in the time domain is the same as a multiplication in the frequency domain. And vice-versa.**
+
+This is a rather important point. Consider what's going on in `get_transformed_values`: it's a (pointwise) multiplication of the frequencies by a vector, $[1,1,1,0,...,0]$. In other words, it is the same as the convolution of the sentiment data with some convolution kernel.
+
+Convolution is an interesting and very common operation. You've actually done it if you have computed a moving average, which is a convolution with a kernel of `rep(1/m,m)` for a moving average of `m` samples. In fact, a moving average shows exactly what this problem is. Cast your gaze at the red line in *Bovary* there. It is a 501 sample moving average, arranged so that
+
+```
+avg[n] = data[n-250]/501 + data[n-249]/501 + ... data[n]/501 + ... + data[n+250]/501
+```
+
+As a result, the moving average isn't defined for `bovary.sentiment[1:249]` and `bovary.sentiment[6244:6494]` and thus there are points missing from the plot. There are two ways of handling those missing points: you can assume that the data is periodic, that the right end of the data is followed by the left end of the data, or you can surround the signal by silence and assume that `bovary.sentiment` is preceeded and followed by 0s.
+
+If you do the first (which is, after all, what the DFT and signal processing in general does), you end up with a circular convolution effect, and the right end of the red line would be at the same y-location as the left end. Whoops.
+
+What happens is that the inputs and outputs needed for the *final* values are taken from the *beginning* of the data, and vice-versa, so the end data is added to the beginning (and vice-versa), leaving completely useless values that force the alignment of the line.
+
+In more mathematical terms, if `bovary.sentiment` is of length N and the convolution kernel (call it `h`) is of length M, then the length of the result and the length of the necessary input data is N+M-1. But `get_transformed_values` is using an input data and result size of N, so naturally the extra data necessary is drawn from the next or previous period and the extra results are added to the existing results in the edge cases.
+
+Fortunately, [padding data with zeros](http://dsp.stackexchange.com/questions/741/why-should-i-zero-pad-a-signal-before-taking-the-fourier-transform) is apparently a fairly common thing to do in DSP circles. In fact, it is so safe as far as not mangling the data as to be used to increase the size of the data in order to use a more efficient FFT algorithm.
+
+Fixing `get_transformed_values` doesn't sound hard, if we know how to do this whole padding thing. And how to do the unpadding afterwards, but I will simply assert that we are not interested in the behavior of the result outside the duration of the text. Since the output is the same as the input after filtering, I can just clip off the region of the result matching the padding on the input. And worry about the consequences later.
+
+The first problem is where to put the padding. Putting extra 0s in the middle of the sentiment data doesn't sound like a good idea as that would likely hoark up our signal. So we are limited to putting it before the sentiment data, after the sentiment data, or surrounding the sentiment data on both sides.
+
+Here's a neat thing: Because everything DFTish is treated as periodic, or circular, it doesn't matter where we put the padding. Putting the padding at the beginning is the same as putting it at the end or splitting it into two parts. Putting the padding 0s after the end of the input samples is a bit easier to manage when it comes time to remove the padding, so that is what I'll do.
+
+Next question: how much padding do we need?
+
+Consider the N+M-1 value: we need M 0s for padding, where M is the length of the convolution kernel. Now remember the Primary Factoid: convolution and multiplication are the same thing. So we should be able to take the multiplication vector we're applying in the frequency domain (technically called a *frequency response*), inverse DFT it, and get a *impulse response*, which is the convolution kernel.
+
+The frequency response for the current filter in `portrait.sentiment` processing is:
+
+```{r}
+portrait.response.frequency <- c(1, 1, 1, rep(0, (length(portrait.fft))/2 - 3))
+plot(portrait.response.frequency,
+     type="l", log="x", xlab="log(Frequency)", ylab="Amplitude", main="Low Pass Filter", sub="Frequency Response")
+```
+
+(Using the log x-axis there allows me to resolve the values for the low frequencies as well as the whole response, but keep in mind that the cut-off is vertical: this keeps three frequencies and zeros the rest.)
+
+The impulse response is created by calling an inverse FFT on the frequency response.
+
+```{r}
+portrait.response.impulse <- fft(
+  c(portrait.response.frequency, rev(Conj(portrait.response.frequency))),
+  inverse = T)
+```
+
+`portrait.response.impulse` is pretty solidly complex with significant imaginary components, but what does it look like in the reals?
+
+```{r, echo=FALSE}
+plot(rotate_values(Re(portrait.response.impulse)), type="l", ylab="", xlab="", main="Low Pass Filter", sub="Impulse response")
+```
+
+Guess what? It's our old friend, the sinc function! (I used `rotate_values` to make the graph clearer.)
+
+The sinc function, or $sin(x)/x$, is not really an old friend, but you run across it a lot in the signal processing literature. One typical use is as the convolution kernel for a  frequency cut-off filter exactly like `get_transformed_values`. Unfortunately, sinc is not a finite impulse response; it never settles to zero and those lobes are far from zero.
+
+What can we do about that? The current behavior is to simply truncate it, which can be continued by guessing a padding length. That works pretty well, actually.
+
+```{r}
+plot_padded_syuzhet <- function(sentiment,factor,label) {
+  len <- length(sentiment)
+  padding <- len * factor
+  result <- get_transformed_values2(c(sentiment, rep(0, padding)), x_reverse_len=len + padding)
+  trimmed <- result[1:len]
+  plot(scale(sentiment), type="h", col="grey", xaxt="n", yaxt="n", xlab="Time", ylab="Emotion",main=label)
+  lines(scale(filter(sentiment, rep(1/501,501), sides=2)), col="blue")
+  lines(scale(trimmed), col="red")
+}
+```
+
+This is unpadded.
+
+```{r, echo=FALSE}
+plot_padded_syuzhet(portrait.sentiment, 0, "A Portrait, Unpadded")
+```
+
+Here are several padded versions of *A Portrait*.
+
+```{r}
+plot_padded_syuzhet_s <- function(sentiment) {
+  par(mfrow=c(2,3))
+  plot_padded_syuzhet(sentiment, 0.5, "0.5")
+  plot_padded_syuzhet(sentiment, 0.75, "0.75")
+  plot_padded_syuzhet(sentiment, 1.0, "1.0")
+  plot_padded_syuzhet(sentiment, 1.5, "1.5")
+  plot_padded_syuzhet(sentiment, 2.0, "2.0")
+  plot_padded_syuzhet(sentiment, 4.0, "4.0")
+  par(mfrow=c(1,1))
+}
+```
+
+```{r, echo=FALSE}
+plot_padded_syuzhet_s(portrait.sentiment)
+```
+
+From the looks of the *Portrait* data, 0.5 is good and it might be possible to go lower. But *Portrait* is the easy case. What about *Bovary*?
+
+```{r, echo=FALSE}
+plot_padded_syuzhet(bovary.sentiment, 0, "Bovary, Unpadded")
+```
+
+```{r, echo=FALSE}
+plot_padded_syuzhet_s(bovary.sentiment)
+```
+
+Not so good. 0.5 makes the ending look a little too...upbeat? 1.0 is not bad, but 1.5 is possibly better.
+
+(I would like to gratefully acknowledge the help of folks from [dsp.stackexchange.com](http://dsp.stackexchange.com/questions/25080/beginner-question-on-aperiodic-samples-and-dft-behavior) for their assistance with this, particularly Matt L., curiousStudent, and hotpaw2. Another very helpful discussion is [Why should I zero-pad a signal before taking the Fourier transform?](http://dsp.stackexchange.com/questions/741/why-should-i-zero-pad-a-signal-before-taking-the-fourier-transform).)
+
+Adjusting the filter
+--------------------
+
+What about using a different filter?
+
+One suggestion from the Wikipedia [Finite Impulse Response:Window design method](https://en.wikipedia.org/wiki/Finite_impulse_response#Window_design_method) section is, "In the window design method, one first designs an ideal IIR filter and then truncates the infinite impulse response by multiplying it with a finite length window function." That sounds like work. (I did do some experiments without anything useful coming out of it.)
+
+How about we simply make the filter a little less abrupt, a little less perfect. Filter 1 is the original, 2 and 3 are increasingly smoothed.
+
+```{r}
+portrait.response.frequency.1 <- c(1, 1, 1,   0,  0,   0,   rep(0, (2*length(portrait.fft))/2 - 6))
+portrait.response.frequency.2 <- c(1, 1, 1,  .5, .25, .125, rep(0, (2*length(portrait.fft))/2 - 6))
+portrait.response.frequency.3 <- c(1, 1, .9, .3, .1,  .05,  rep(0, (2*length(portrait.fft))/2 - 6))
+```
+
+```{r, echo=FALSE}
+portrait.response.impulse.1 <- fft(
+  c(1, portrait.response.frequency.1, rev(Conj(portrait.response.frequency.1))) / length(portrait.response.frequency.1),
+  inverse = T)
+portrait.response.impulse.2 <- fft(
+  c(1, portrait.response.frequency.2, rev(Conj(portrait.response.frequency.2))) / length(portrait.response.frequency.2),
+  inverse = T)
+portrait.response.impulse.3 <- fft(
+  c(1, portrait.response.frequency.3, rev(Conj(portrait.response.frequency.3))) / length(portrait.response.frequency.3),
+  inverse = T)
+plot(rotate_values(Re(portrait.response.impulse.2)), type="l", ylab="", yaxt="n", xlab="", xaxt="n", col="red")
+lines(rotate_values(Re(portrait.response.impulse.3)), col="blue")
+lines(rotate_values(Re(portrait.response.impulse.1)), col="green")
+legend("topleft", c("Filter 1", "Filter 2", "Filter 3"), col=c("green", "red", "blue"), cex=.75, lty=1)
+```
+
+The alternative filters produce the following syuzhet graphs with 1.0x padding.
+
+```{r}
+transform_with_filter <- function(frequency_filter, sentiment, factor) {
+  sentiment.length <- length(sentiment)
+  length.padded <- sentiment.length * (factor + 1)
+  
+  frequency_filter <- frequency_filter / sum(frequency_filter) # normalize the frequency filter to avoid gain/loss
+
+  half_filter.length <- (length.padded / 2)
+  half_filter <- c(frequency_filter, rep(0, half_filter.length - length(frequency_filter)))
+
+  fft.padded <- fft( c(sentiment, rep(0, sentiment.length * factor)) )
+  
+  half_fft <- fft.padded[1:(length(fft.padded)/2)]
+  half_fft.mod <- half_fft * half_filter
+
+  inv <- fft(c(half_fft.mod, rev(Conj(half_fft.mod[2:length(half_fft.mod)]))), inverse=T)
+  
+  return (inv[1:sentiment.length])
+}
+```
+
+```{r, echo=FALSE}
+par(mfrow=c(3,2))
+plot(Re(transform_with_filter(c(1, 1, 1, 0,   0,   0), portrait.sentiment, 1.0)),
+     type="l", main="A Portrait of the Artist as a Young Man", ylab="Emotion",
+     yaxt="n", xlab="Time", xaxt="n", sub="Filter 1")
+plot(Re(transform_with_filter(c(1, 1, 1, 0,   0,   0), bovary.sentiment, 1.0)),
+     type="l", main="Madame Bovary", ylab="Emotion", yaxt="n", xlab="Time", xaxt="n", sub="Filter 1")
+plot(Re(transform_with_filter(c(1, 1, 1, .5, .25, .125), portrait.sentiment, 1.0)),
+     type="l", main="A Portrait of the Artist as a Young Man", ylab="Emotion",
+     yaxt="n", xlab="Time", xaxt="n", sub="Filter 2")
+plot(Re(transform_with_filter(c(1, 1, 1, .5, .25, .125), bovary.sentiment, 1.0)),
+     type="l", main="Madame Bovary", ylab="Emotion", yaxt="n", xlab="Time", xaxt="n", sub="Filter 2")
+plot(Re(transform_with_filter(c(1, 1, .9, .3, .1, .05), portrait.sentiment, 1.0)),
+     type="l", main="A Portrait of the Artist as a Young Man", ylab="Emotion",
+     yaxt="n", xlab="Time", xaxt="n", sub="Filter 3")
+plot(Re(transform_with_filter(c(1, 1, .9, .3, .1, .05), bovary.sentiment, 1.0)),
+     type="l", main="Madame Bovary", ylab="Emotion", yaxt="n", xlab="Time", xaxt="n", sub="Filter 3")
+par(mfrow=c(1,1))
+```
+
+Overall, there are some differences to the curves for the first three, but I do not think they are major: remember, the goal here is not to reconstruct the original signal in high-fidelity, it is to extract the frequencies lowest and (hypothetically) most important to the text's overall plot. The Gaussian filter is interestingly different, and deserves further study.
+
+My conclusion is to use the original with a padding factor in the vicinity of 1.25 and call it a day.
+
+A final version of `get_transformed_values`
+-------------------------------------------
+
+```{r}
+get_transformed_values3 <- function(raw_values,
+                                   low_pass_size = 3,
+                                   x_reverse_len = 100,
+                                   padding_factor = 1.25,
+                                   scale_vals = FALSE,
+                                   scale_range = FALSE){
+  if(!is.numeric(raw_values)) stop("Input must be an numeric vector")
+  if(low_pass_size > length(raw_values)) stop("low_pass_size ... length of raw_values input vector")
+  raw_values.len <- length(raw_values)
+  padding.len = raw_values.len * padding_factor
+  # Add padding, fft, and normalize
+  values_fft <- fft( c(raw_values, rep(0, padding.len)) ) / (raw_values.len + padding.len)
+  # Avoid gain/loss while filtering by c(1,1,1,0...)
+  keepers <- values_fft[1:low_pass_size] / low_pass_size
+  # Preserve frequency domain structure
+  modified_spectrum <- c(keepers,
+                         rep(0, (x_reverse_len * (1+padding_factor)) - (2*low_pass_size) + 1),
+                         rev(Conj( keepers[2:(length(keepers))] )))
+  inverse_values <- fft(modified_spectrum, inverse=T)
+  # Strip padding
+  inverse_values <- inverse_values[1:(x_reverse_len)]
+  transformed_values <- Re(inverse_values)
+  if(scale_vals & scale_range) stop("ERROR: scale_vals and scale_range cannot both be true.")
+  if(scale_vals){
+    return(scale(transformed_values))
+  } else if(scale_range & !scale_vals) {
+    return(rescale(transformed_values))
+  } else {
+    return(transformed_values)
+  }
+}
+```
+
+How well does it do? Here are three examples, including one neither of us has been looking at, you can tell me.
+
+```{r}
+plot_transformed_values3 <- function(sentiment, title) {
+  m_avg <- scale(filter(sentiment, rep(1/501,501), sides=2))
+  values <- scale(get_transformed_values3(sentiment, x_reverse_len=length(sentiment)))
+  max_y <- max(sentiment, m_avg[which(!is.na(m_avg))], values)
+  min_y <- min(sentiment, m_avg[which(!is.na(m_avg))], values)
+  plot(sentiment, type="l", main=title, xlab="Time", ylab="Emotion", xaxt="n", yaxt="n", col="grey", ylim=c(min_y,max_y))
+  lines(m_avg, col="red")
+  lines(values, col="blue")
+}
+```
+
+```{r, echo=FALSE}
+plot_transformed_values3(portrait.sentiment, "A Portrait of the Artist as a Young Man")
+plot_transformed_values3(bovary.sentiment, "Madame Bovary")
+plot_transformed_values3(
+  get_sentiment(get_sentences(get_text_as_string("Romeo and Juliet.txt"), strip_quotes=T)),
+  "The Tragedy of Romeo and Juliet")
+```
+
+Challenges
+----------
+
+During the discussion around Syuzhet, a whole stack of more-or-less synthetic inputs have been presented, showing weaknesses in the original algorithm. Here are a few, starting with those from [Annie Swafford](https://github.com/jswafford/syuzhet-samples).
+
+Zeroing the last third of Portrait.
+
+```{r}
+nterms <- length(portrait.sentiment)
+signal <- portrait.sentiment
+signal[(2*nterms/3):nterms] <- 0
+plot_transformed_values3(signal, "Neutralizing the last third of Portrait")
+```
+
+Zeroing all but the middle 20 sentences.
+
+```{r}
+signal <- portrait.sentiment
+signal[1:(nterms/2-10)] <- 0
+signal[(nterms/2+10):nterms] <- 0
+plot_transformed_values3(signal, "The middle 20 sentences of Portrait")
+```
+
+Zeroing all but the middle 2 sentences.
+
+```{r}
+signal <- portrait.sentiment
+signal[1:(nterms/2-1)] <- 0
+signal[(nterms/2+1):nterms] <- 0
+plot_transformed_values3(signal, "The middle 2 sentences of Portrait")
+```
+
+Add strong positive spikes at the beginning and end.
+
+```{r}
+signal <- portrait.sentiment
+signal[1:200] <- signal[1:200] + round((200:1)/25)
+signal[(nterms-199):nterms] <- signal[(nterms-200):nterms] + round((1:200)/25)
+plot_transformed_values3(signal, "Extra positives at start and end")
+```
+
+Next is one of Swafford's extremely synthetic examples, starting with sentiment data from *A Portrait*, but modifiying it randomly in the higher frequencies and adding strong signals to the fifth through seventh frequencies.
+
+```{r}
+# This function randomizes all terms of a fourier series above `keep`. The
+# random noise falls off linearly, with max magnitude equal to the number of
+# randomized terms.
+rand_higher <- function(fft_signal, scale=1, keep=3){
+  fft_signal <- fft_signal[1:(length(fft_signal)/2)]
+  n_terms = length(fft_signal)
+  n_junk <- length(fft_signal)-keep
+  noise <- (rnorm(n_junk) + rnorm(n_junk)*1i) * (n_junk:1)
+  fft_signal[4:n_terms] <- noise*scale
+  return(c(1, fft_signal, rev(Conj(fft_signal[2:(length(fft_signal))]))))
+}
+fft_signal <- rand_higher(fft(portrait.sentiment), .01)
+fft_signal[5:7] <- c(6-1i, 6, 5i)*1000
+plot_transformed_values3(Re(fft(fft_signal, inverse=T)), "Randomize the upper harmonics; add strong 5th-7th harmonics")
+```
+
+You will notice that neither the moving average nor the Syuzhet line is wildly useful there. This is what they look like:
+
+```{r}
+synthetic <- Re(fft(fft_signal, inverse=T))
+m_avg <- scale(filter(synthetic, rep(1/501,501), sides=2))
+values <- scale(get_transformed_values3(synthetic, x_reverse_len=length(synthetic)))
+plot(m_avg, type="l", main="Synthetic", xlab="Time", ylab="Emotion", xaxt="n", yaxt="n", col="red")
+lines(values, col="blue")
+legend("topleft", c("501 element moving average", "Syuzhet"), col=c("red", "blue"), cex=.75, lty=1)
+```
+
+This synthetic example has been designed to have a low-frequency signal matching that of *A Portrait* but very strong signals just above those looked at by Syuzhet.
+
+```{r}
+plot(Mod(fft_signal[1:200]), type="h", ylab="Amplitude", xlab="Frequency bin", xaxt="n")
+```
+
+I'm not going to spend too much time analyzing the signal here, but the important thing to notice is that the 5-7th frequency bins are *much stronger* than any other in the signal, including bin 1, which has the constant, frequency 0, signal that provides an overall level for the spectrum.
+
+One hypothesis of Syuzhet that is very, very testable is whether this kind of perverse signal exists in a natural text. The undelyling assumption of Syuzhet is that it doesn't; that books have a "plot" that Syuzet in some sense can discover, that this "plot" signal lives primarily in the low-frequency components that guide the overall shape of the book's sentiment data, and that these "plot" frequencies are stronger than the other frequency components of the sentiment spectrum.
+
+It would be very interesting to find a text that violates this low-frequency primacy, perhaps something made from unrelated episodes? It would almost be equally interesting to find that no text violates it.
+
+Conclusions
+-----------
+
+After going through this journey of adventure and discovery, I have come to the following conclusions:
+
+* Fourier analysis is *necessary*, if you intend to look at texts as sequences rather than bags of words. At some point, you will be looking at the wrong end of a Fourier transform. Remember the Primary Factoid? A multiplication in the frequency domain is the same as a convolution in the time domain, and many of the normal methods to look at time series data boil down to convolutions. In fact, the moving average can be expressed as a convolution (althoug it may be implemented directly for better performance). I believe (Don't quote me.) that any algorithm that generates every value in an output series using a polynomial expression of the elements of an input series is a convolution and therefore is a close personal relative of Fourier.
+
+    Further, a text viewed as a sequence of *somethings* is a time series, and Fourier analysis is a primary tool for poking around the innards of time series. 
+
+* Fourier analysis is *fun*. There are some interesting questions here. Do all "natural" texts have their strongest frequency components at the lowest frequencies? What are the other strong frequencies found in the spectrums? *Is* there a relationship between the spectra of different books? Do the spectra change over time or location? Genre? Are there other aspects that can productively examined this way?
+
+* I am at least as skeptical of sentiment analysis as anyone else, if not more. Although I have accepted as a given throughout this notebook that sentiment analysis using off-the-shelf tools provides valid data for out-of-copyright fiction and that sentiment analysis provides some kind of valid window into the books' "plot", I don't necessarily believe either.
+
+    Sentiment analysis smells funny to me, and its application to anything other than tweets gives me a funny feeling in the pit of my stomach. Maybe it is me: I haven't been around it enough to learn to trust it. Certainly, I'm willing to accept the failure rate of off-the-shelf part-of-speech taggers. 
+
+    Several times in the Syuzhet discussions I have seen mentions of problems caused by satire or metaphors or something. Those sound bad. But what really gives me pause is the suggestion I read somewhere but cannot now locate to cite: What about an extended portion of a text from the point-of-view of the antagonist? An up-beat antagonist probably doesn't bode well for the protagonist, but sentiment analysis might have you think it does, assuming that you're rootin' for the protagonist.
+
+The bottom line overall is that things like Syuzhet are fun and cool and one shouldn't get too hung up on the sinusoid and periodic nature of life in the frequency domain. Don't throw the baby out with the bathwater unless you're sure the baby is defective and the bathwater contaminated.
+
+
