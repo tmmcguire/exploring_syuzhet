@@ -4,7 +4,6 @@ author: "Tommy M. McGuire"
 date: "08/06/2015"
 output:
   html_document:
-    self_contained: no
     smart: no
     toc: yes
 ---
@@ -700,6 +699,8 @@ signal[1:(nterms/2-10)] <- 0
 signal[(nterms/2+10):nterms] <- 0
 plot_transformed_values3(signal, "The middle 20 sentences of Portrait")
 ```
+
+Look! It's a longhorn!
 
 Zeroing all but the middle 2 sentences.
 
