@@ -4,11 +4,11 @@ author: "Tommy M. McGuire"
 date: "08/06/2015"
 output:
   html_document:
-    smart: no
+    self_contained: no
     toc: yes
 ---
 
-[The RStudio project for this document lives at XXX.]
+[The RStudio project for this document lives at [exploring_syuzhet](https://github.com/tmmcguire/exploring_syuzhet). The HTML version of this document is too big or spiffy or something for Blogger; this should live on [Maniagnosis](http://maniagnosis.crsr.net/).]
 
 Syuzhet
 =======
@@ -19,7 +19,7 @@ The post ["The Rest of the Story"](http://www.matthewjockers.net/2015/02/25/the-
 His comments, and the package, when he [published it on github](https://github.com/mjockers/syuzhet), drew a significant 
 amount of criticism on a number of levels from the basic techniques it uses to produce raw data from texts to the 
 techniques it uses to analyze the data.
-In fact, Jockers seems to have thrown in the towel with
+In fact, Matt seems to have thrown in the towel with
 ["Requiem for a low pass filter"](http://www.matthewjockers.net/2015/04/06/epilogue/) where he wrote,
 "I’m not entirely ready to concede that Fourier is useless for the larger problem,
 but [Ben Schmidt and Scott Enderle, presumably along with another major player in the conversation, Annie Swafford]
@@ -37,9 +37,9 @@ his *[Think Complexity](http://greenteapress.com/complexity/index.html)* was pre
 How does Syuzhet work?
 ----------------------
 
-["Syuzhet"](https://en.wikipedia.org/wiki/Fabula_and_syuzhet) is a common term in literary analysis, from the Russian word сюжет meaning roughly, "I feel very smart when I use obscure terms"; it is counterpoised against the term "fabula", which refers approximately to, "the outer and smaller of the two bones in the leg between the knee and the ankle". Syuzhet, in any case, refers to the organization of the story itself, as opposed to the sequence of the events in the story; Jockers loosely associates it with "plot" and more precisely to the sequence of emotional affects the story contains.
+["Syuzhet"](https://en.wikipedia.org/wiki/Fabula_and_syuzhet) is a common term in literary analysis, from the Russian word сюжет meaning roughly, "I feel very smart when I use obscure terms"; it is counterpoised against the term "fabula", which refers approximately to, "the outer and smaller of the two bones in the leg between the knee and the ankle". Syuzhet, in any case, refers to the organization of the story itself, as opposed to the sequence of the events in the story; Matt loosely associates it with "plot" and more precisely to the sequence of emotional affects the story contains.
 
-For current usage here, syuzhet is an R package written by Jockers that uses Fourier analysis to extract a simple, linear description of the "plot" of a text from the text itself.
+For current usage here, syuzhet is an R package written by Matt that uses Fourier analysis to extract a simple, linear description of the "plot" of a text from the text itself.
 
 In broad terms, syuzhet (the package)
 
@@ -49,7 +49,7 @@ In broad terms, syuzhet (the package)
 4. Uses a low-pass filter to remove the higher-frequency components, in order to simplify the resulting graph. (You knew there was a graph here somewhere, didn't you?)
 5. Reverses the Fourier transform to produce a sequence of values of *something* that represents the time-varying structure of the text.
 
-Now, as I mentioned before, I am neither a digital humanist nor a signal processing guy, so as I said I don't actually know what I'm talking about, but that sounds to me like (a) a very interesting and possibly novel approach for analyzing the large-scale structure of a text (and, by the way, for comparing different texts) and (b) no less valid than anything else that goes on around here. Certainly, the data from the sentiment analysis is a sequence of samples in a time series, and the DFT is dandy tool for analyzing those, right?
+Now, as I mentioned before, I am neither a digital humanist nor a signal processing guy, so I don't actually know what I'm talking about, but that sounds to me like (a) a very interesting and possibly novel approach for analyzing the large-scale structure of a text (and, by the way, for comparing different texts) and (b) no less valid than anything else that goes on around here. Certainly, the data from the sentiment analysis is a sequence of samples in a time series, and the DFT is dandy tool for analyzing those, right?
 
 A simple, validating example
 ----------------------------
@@ -90,7 +90,7 @@ plot(portrait.sentiment, type = "l",
      ylab="Emotional Valence")
 ```
 
-The result looks eerily similar to the examples from Jockers' posts, so I seem to be doing something right here. (I am somewhat new to R, as well.) 
+The result looks eerily similar to the examples from Matt's posts, so I seem to be doing something right here. (I am somewhat new to R, as well.) 
 
 So, what happens with the whole DFT thing?
 
@@ -102,7 +102,7 @@ plot(portrait.values, type="h",
      ylab="Emotional valence")
 ```
 
-And again, that looks roughly like the results from Jockers. Yay!
+And again, that looks roughly like the results from Matt. Yay!
 
 There are a few interesting parameters to `get_transformed_values`: 
 
@@ -110,7 +110,7 @@ There are a few interesting parameters to `get_transformed_values`:
 * `scale_vals`, whether or not to normalize the values using R's `scale`, and
 * `scale_range`, whether or not to scale the values from -1 to +1.
 
-Let's take a look at the effects of the last two (note that apparently they cannot both be true). First, note that the graph above was produced with `scale_vals`=TRUE, which replicates Jockers' graphs.
+Let's take a look at the effects of the last two (note that apparently they cannot both be true). First, note that the graph above was produced with `scale_vals`=TRUE, which replicates Matt's graphs.
 
 ```{r}
 portrait.values <- get_transformed_values(portrait.sentiment, scale_vals = FALSE)
@@ -124,7 +124,7 @@ plot(portrait.values, type="h",
 title(main="A Portrait of the Artist as a Young Man", sub="scale_vals=FALSE, scale_range=FALSE")
 ```
 
-That seems weirdly negative. No wonder I had a hard time getting into the book. (I wonder if the comments on Syuzhet would have been different if Jockers had been using that version of the graph?)
+That seems weirdly negative. No wonder I had a hard time getting into the book. (I wonder if the comments on Syuzhet would have been different if Matt had been using that version of the graph?)
 
 ```{r}
 portrait.values <- get_transformed_values(portrait.sentiment, scale_range = TRUE)
@@ -142,7 +142,7 @@ That is similar to the original, but scaled to be between -1 and 1. Those parame
 
 At this point, I'm not entirely happy with the "shading" effect of "h" for the plot type; I think it overemphasizes the baseline. I'll just use "l" for a while.
 
-One of the major complaints about the work is that the `low_pass` parameter is 3, which does emphasize Jockers' goal of reducing the plot to a very simple structure but produces artifacts like the excessivly positive peaks towards the beginning and end of *A Portrait*. Adding a few more frequencies adjusts those artifacts, to an extent.
+One of the major complaints about the work is that the `low_pass` parameter is 3, which does emphasize Matt's goal of reducing the plot to a very simple structure but produces artifacts like the excessivly positive peaks towards the beginning and end of *A Portrait*. Adding a few more frequencies adjusts those artifacts, to an extent.
 
 ```{r}
 portrait.values.5 <- get_transformed_values(portrait.sentiment, scale_range = TRUE, low_pass_size = 5)
@@ -258,7 +258,7 @@ plot(Im(portrait.fft), type="h", ylab="Imaginary comp.")
 
 The normal way of looking at complex numbers is as a (real,imaginary) pair, an equation like $4 + 3i$, where $i$ is the square root of -1.
 
-An alternative, and frequently better, way of looking at them is in polar notation. If you think of a complex number as living on the the complex plane, an extension of the real number line, then the complex number describes a point on the plane; the real component is the x-value and the imaginary component is the y-value, say. But the alternative way of looking at the same number using polar notation, describes the point as a distance from a central point and an angle from a specific ray leaving that central point. From my understanding, for complex numbers the center is (0,0) on the complex plane, and the specific ray is the positive real axis.
+An alternative way of looking at them is in polar notation, which is frequently better for visualization. If you think of a complex number as living on an extension of the real number line, the the complex plane, then the complex number describes a point on the plane; the real component is the x-value and the imaginary component is the y-value, say. But the alternative way of looking at the same number using polar notation describes the point as a distance from a central point and an angle from a specific ray leaving that central point. From my understanding, for complex numbers the center is (0,0) on the complex plane, and the specific ray is the positive real axis.
 
 Here is a plot of the magnitudes and phases of the fft values:
 
@@ -283,7 +283,7 @@ Anyway, if all of this works, `portrait.inverse`, the result of inverting the FF
 plot(Re(portrait.inverse), type="l", ylab="Real", xlab="Time", main="portrait.inverse")
 ```
 
-That seems to be the case, at least according to the real components. On the other hand, the imaginary components are pretty small.
+That seems to be the case, at least according to the real components. On the other hand, the imaginary components are pretty close to zero.
 
 ```{r}
 plot(Im(portrait.inverse), type="l", ylab="Imaginary", xlab="Time")
@@ -435,29 +435,29 @@ This is a rather important point. Consider what's going on in `get_transformed_v
 
 Convolution is an interesting and very common operation. You've actually done it if you have computed a moving average, which is a convolution with a kernel of `rep(1/m,m)` for a moving average of `m` samples. In fact, a moving average shows exactly what this problem is. Cast your gaze at the red line in *Bovary* there. It is a 501 sample moving average, arranged so that
 
-```
-avg[n] = data[n-250]/501 + data[n-249]/501 + ... data[n]/501 + ... + data[n+250]/501
-```
+\[
+  avg[n] = data[n-250]/501 + data[n-249]/501 + \cdots\ + data[n]/501 + \cdots\ + data[n+250]/501
+\]
 
-As a result, the moving average isn't defined for `bovary.sentiment[1:249]` and `bovary.sentiment[6244:6494]` and thus there are points missing from the plot. There are two ways of handling those missing points: you can assume that the data is periodic, that the right end of the data is followed by the left end of the data, or you can surround the signal by silence and assume that `bovary.sentiment` is preceeded and followed by 0s.
+As a result, the moving average isn't defined for `bovary.sentiment[1:249]` and `bovary.sentiment[6244:6494]` and thus there are points missing from the plot. There are two ways of recovering those missing points: you can assume that the data is periodic, that the right end of the data is followed by the left end of the data, or you can surround the signal by silence and assume that `bovary.sentiment` is preceeded and followed by 0s.
 
 If you do the first (which is, after all, what the DFT and signal processing in general does), you end up with a circular convolution effect, and the right end of the red line would be at the same y-location as the left end. Whoops.
 
-What happens is that the inputs and outputs needed for the *final* values are taken from the *beginning* of the data, and vice-versa, so the end data is added to the beginning (and vice-versa), leaving completely useless values that force the alignment of the line.
+What happens is that the inputs and outputs needed for the *final* values are taken from the *beginning* of the data, and vice-versa, so the end data is added to the beginning (and vice-versa), leaving completely useless values that also force the alignment of the line.
 
-In more mathematical terms, if `bovary.sentiment` is of length N and the convolution kernel (call it `h`) is of length M, then the length of the result and the length of the necessary input data is N+M-1. But `get_transformed_values` is using an input data and result size of N, so naturally the extra data necessary is drawn from the next or previous period and the extra results are added to the existing results in the edge cases.
+In more mathematical terms for DFT convolution, if `bovary.sentiment` is of length $N$ and the convolution kernel (call it `h`) is of length $M$, then the length of the result and the length of the necessary input data is $N+M-1$. But `get_transformed_values` is using an input data and result size of $N$, so naturally the extra data necessary is drawn from the next or previous period and the extra results are added to the existing results in the edge cases.
 
 Fortunately, [padding data with zeros](http://dsp.stackexchange.com/questions/741/why-should-i-zero-pad-a-signal-before-taking-the-fourier-transform) is apparently a fairly common thing to do in DSP circles. In fact, it is so safe as far as not mangling the data as to be used to increase the size of the data in order to use a more efficient FFT algorithm.
 
 Fixing `get_transformed_values` doesn't sound hard, if we know how to do this whole padding thing. And how to do the unpadding afterwards, but I will simply assert that we are not interested in the behavior of the result outside the duration of the text. Since the output is the same as the input after filtering, I can just clip off the region of the result matching the padding on the input. And worry about the consequences later.
 
-The first problem is where to put the padding. Putting extra 0s in the middle of the sentiment data doesn't sound like a good idea as that would likely hoark up our signal. So we are limited to putting it before the sentiment data, after the sentiment data, or surrounding the sentiment data on both sides.
+The first problem is where to put the padding. Putting extra 0s in the middle of the sentiment data doesn't sound like a good idea as that seems like it would hoark up our signal. So we are limited to putting it before the sentiment data, after the sentiment data, or surrounding the sentiment data on both sides.
 
 Here's a neat thing: Because everything DFTish is treated as periodic, or circular, it doesn't matter where we put the padding. Putting the padding at the beginning is the same as putting it at the end or splitting it into two parts. Putting the padding 0s after the end of the input samples is a bit easier to manage when it comes time to remove the padding, so that is what I'll do.
 
 Next question: how much padding do we need?
 
-Consider the N+M-1 value: we need M 0s for padding, where M is the length of the convolution kernel. Now remember the Primary Factoid: convolution and multiplication are the same thing. So we should be able to take the multiplication vector we're applying in the frequency domain (technically called a *frequency response*), inverse DFT it, and get a *impulse response*, which is the convolution kernel.
+Consider the $N+M-1$ value: we need $M-1$ 0s for padding, where $M$ is the length of the convolution kernel. Now remember the Primary Factoid: convolution and multiplication are the same thing. So we should be able to take the multiplication vector we're applying in the frequency domain (technically called a *frequency response*), inverse DFT it, and get a *impulse response*, which is the convolution kernel.
 
 The frequency response for the current filter in `portrait.sentiment` processing is:
 
@@ -777,8 +777,17 @@ After going through this journey of adventure and discovery, I have come to the 
 
     Sentiment analysis smells funny to me, and its application to anything other than tweets gives me a funny feeling in the pit of my stomach. Maybe it is me: I haven't been around it enough to learn to trust it. Certainly, I'm willing to accept the failure rate of off-the-shelf part-of-speech taggers. 
 
-    Several times in the Syuzhet discussions I have seen mentions of problems caused by satire or metaphors or something. Those sound bad. But what really gives me pause is the suggestion I read somewhere but cannot now locate to cite: What about an extended portion of a text from the point-of-view of the antagonist? An up-beat antagonist probably doesn't bode well for the protagonist, but sentiment analysis might have you think it does, assuming that you're rootin' for the protagonist.
+    Several times in the Syuzhet discussions I have seen mentions of problems caused by satire or metaphors or something. Those sound bad. But about an extended portion of a text from the point-of-view of the antagonist? In a footnote to [The Rest of the Story](http://www.matthewjockers.net/2015/02/25/the-rest-of-the-story/), Matt writes,
+    
+    > The most spectacular example of failure was discovered by my son. He’d just finished reading one of the books in my
+    > corpus, and I showed him the plot shape from the book and asked him it it made sense. He said, “well, yes, mostly.  But 
+    > this spike here is all wrong.”  It was a spike in good fortune, positive valence, at precisely the place in the novel 
+    > where the villains had scored a major victory.  The positive valence was associated with a several page long section in 
+    > which the bad guys were having a very good time. Readers, of course, would see this as a negative moment in the text, 
+    > Suyzhet does not.
+
+    An up-beat antagonist probably doesn't bode well for the protagonist, assuming that you're rootin' for the protagonist, but sentiment analysis might have you think it does.
 
 The bottom line overall is that things like Syuzhet are fun and cool and one shouldn't get too hung up on the sinusoid and periodic nature of life in the frequency domain. Don't throw the baby out with the bathwater unless you're sure the baby is defective and the bathwater contaminated.
 
-The source for this document is on github at XXX. I'm going to be submitting a pull request for Syuzhet as soon as I get this thing posted.
+The source for this document is on github at [exploring_syuzhet](https://github.com/tmmcguire/exploring_syuzhet). I'm going to be submitting a pull request for Syuzhet as soon as I get this thing posted. The blog is [Maniagnosis](http://maniagnosis.crsr.net/).
