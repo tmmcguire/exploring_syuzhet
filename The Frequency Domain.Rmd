@@ -11,7 +11,7 @@ Following up on my previous excursion into R, I am going to take a closer look a
 library(syuzhet)
 ```
 
-I will be using parts of [Syuzhet](https://github.com/mjockers/syuzhet), but not primarily the `get_transformed_values` function which does its Fourier analysis. Instead, I will generally be doing that manually, only using Syuzhet for its other functions, notibly `get_sentiment`. Using the default arguments of `get_sentiment` produces:
+I will be using parts of [Syuzhet](https://github.com/mjockers/syuzhet), but not primarily the `get_transformed_values` function which does its Fourier analysis. Instead, I will generally be doing that manually, only using Syuzhet for its other functions, notably `get_sentiment`. Using the default arguments of `get_sentiment` produces:
 
 ```{r}
 portrait.sentences <- get_sentences(get_text_as_string("A_Portrait.txt"),strip_quotes=T)
@@ -51,13 +51,13 @@ I'm sensing a trend in this book. Anyway...
 The frequency domain
 --------------------
 
-First, I need some functions to easily produce the frequency domain data.
+First, I need some functions to easily produce the frequency domain data. For a discussion of the segment of the FFT returned by `get_fft`, see my previous post. Suffice it to say that those are the *interesting* values.
 
 ```{r}
 get_fft <- function(data) {
   length <- length(data)
   fft <- fft(data)
-  return (fft[1:(1+length/2)]/length)
+  return (fft[1:(floor(length/2) + 1)]/length)
 }
 
 get_frequency_magnitudes <- function(data) {
@@ -78,6 +78,7 @@ plot_frequency_magnitudes <- function(data, freq_domain = FALSE, rmin=1, rmax=le
   }
   plot(data[rmin:rmax], type="h", xlab="Harmonic", ylab="Amplitude", main=title, log=log)
   lines(data[rmin:rmax])
+  grid()
 }
 ```
 
@@ -85,6 +86,9 @@ Here is the frequency spectrum of *A Portrait of the Artist as a Young Man*:
 
 ```{r, echo=FALSE}
 plot_frequency_magnitudes(portrait.sentiment, title="A Portrait of the Artist as a Young Man")
+lines(filter(get_frequency_magnitudes(portrait.sentiment), filter=rep(1/501,501)), col="red", lwd=3)
+grid()
+legend("topright", c("Raw magnitudes", "501 element moving average"), col=c("black","red"), cex=0.75, lty=1)
 ```
 
 and here are the lowest harmonics:
@@ -100,50 +104,99 @@ This is an interesting view to use to investigate the changes when the data is p
 Padding adds zero elements to the end of the array; I am measuring the amount of padding in terms of the length of the original sentiment data: 1x indicates the sentiment data followed by the same number of zeros; 2x, the sentiment data followed by twice as many zeros.
 
 ```{r}
-portrait.sentiment.1x <- c(portrait.sentiment, rep(0, length(portrait.sentiment)))
-portrait.sentiment.2x <- c(portrait.sentiment, rep(0, 2*length(portrait.sentiment)))
-portrait.sentiment.4x <- c(portrait.sentiment, rep(0, 4*length(portrait.sentiment)))
-portrait.sentiment.8x <- c(portrait.sentiment, rep(0, 8*length(portrait.sentiment)))
+pad <- function(data, padding=1) {
+  return (c(data, rep(0, length(data) * padding)))
+}
+
+portrait.sentiment.1x <-   pad(portrait.sentiment, 1)
+portrait.sentiment.2x <-   pad(portrait.sentiment, 2)
+portrait.sentiment.4x <-   pad(portrait.sentiment, 4)
+portrait.sentiment.8x <-   pad(portrait.sentiment, 8)
+portrait.sentiment.100x <- pad(portrait.sentiment, 100)
 ```
 
-What I have done in those five graphs is to increase the padding from nothing to eight times the length of the original data, then graphed the same region of the frequency spectrum: the first 50 frequency bins for the first graph and the first 450 (i.e. $50 * (8 + 1)$) bins for the last.
+What I have done in the next six graphs is to increase the padding from nothing to 100 times the length of the original data, then graphed the same region of the frequency spectrum: the first 50 frequency bins for the first graph and the first 450 (i.e. $50 * (8 + 1)$) bins for the 8x graph.
 
 ```{r, echo=FALSE}
-plot_frequency_magnitudes(portrait.sentiment,    rmax=50,  title="No padding")
-plot_frequency_magnitudes(portrait.sentiment.1x, rmax=100, title="1x padding")
-plot_frequency_magnitudes(portrait.sentiment.2x, rmax=150, title="2x padding")
-plot_frequency_magnitudes(portrait.sentiment.4x, rmax=250, title="4x padding")
-plot_frequency_magnitudes(portrait.sentiment.8x, rmax=450, title="8x padding")
+plot_frequency_magnitudes(portrait.sentiment,      rmax=50,     title="No padding")
+plot_frequency_magnitudes(portrait.sentiment.1x,   rmax=100,    title="1x padding")
+plot_frequency_magnitudes(portrait.sentiment.2x,   rmax=150,    title="2x padding")
+plot_frequency_magnitudes(portrait.sentiment.4x,   rmax=250,    title="4x padding")
+plot_frequency_magnitudes(portrait.sentiment.8x,   rmax=450,    title="8x padding")
+plot_frequency_magnitudes(portrait.sentiment.100x, rmax=101*50, title="100x padding")
 ```
 
 Two things to note:
 
-* Adding padding increases the frequency resolution of the spectrum. In the first graph, there are 50 bins for this region of the spectrum and in the last there are 450. As a result, the shape of the spectrum is much smoother in the later graphs.
-* Adding padding does not alter the frequency spectrum. The four graphs have the same shape; they are four different views on the underlying portion of the spectrum.
+* Adding padding increases the frequency resolution of the spectrum. In the first graph, there are 50 bins for this region of the spectrum and in the last there are 5050. As a result, the shape of the spectrum is much smoother in the later graphs.
+* Adding padding does not alter the frequency spectrum. The four graphs have the same shape; they are four different views on the underlying spectrum.
 
-To confirm that adding padding does not change the frequency spectrum, here are the entire graphs for each:
+To confirm that adding padding does not change the frequency spectrum, here are the entire graphs for some of them:
 
 ```{r, echo=FALSE}
-plot_frequency_magnitudes(portrait.sentiment,    title="No padding")
-plot_frequency_magnitudes(portrait.sentiment.1x, title="1x padding")
-plot_frequency_magnitudes(portrait.sentiment.2x, title="2x padding")
-plot_frequency_magnitudes(portrait.sentiment.4x, title="4x padding")
-plot_frequency_magnitudes(portrait.sentiment.8x, title="8x padding")
+plot_frequency_magnitudes(portrait.sentiment,      title="No padding")
+plot_frequency_magnitudes(portrait.sentiment.2x,   title="2x padding")
+plot_frequency_magnitudes(portrait.sentiment.8x,   title="8x padding")
 ```
 
 Although the amplitudes differ, the shape of the spectrum remains the same.
+
+### Window functions
+
+One option for analyzing the frequency spectrum is to smooth the harmonics with window functions. What happens when we apply a window function to the sentiment data? The simplest is the rectangular window function, which is exactly what we have been using so far. Other window functions shape the data in different ways.
+
+```{r}
+portrait.sentiment.hamming <- portrait.sentiment * signal::hamming(length(portrait.sentiment))
+portrait.sentiment.blackman <- portrait.sentiment * signal::blackman(length(portrait.sentiment))
+```
+
+```{r,echo=FALSE}
+plot(portrait.sentiment.hamming, type="l", ylab="Sentiment", xlab="Time", main="Hamming window")
+plot(portrait.sentiment.blackman, type="l", ylab="Sentiment", xlab="Time", main="Blackman window")
+```
+
+The `hamming` and `blackman` functions are from the `signal` module, and produce vectors of the given size containing values suitable for multiplication.
+
+```{r, echo=FALSE}
+par(mfcol = c(1,3))
+plot(rep(1,length(portrait.sentiment)), type="l", ylab="", xlab="", main="Rectangular window")
+plot_frequency_magnitudes(portrait.sentiment, title = "Filtered frequencies")
+plot_frequency_magnitudes(portrait.sentiment, rmax = 20, title = "First 20 elements")
+plot(signal::hamming(length(portrait.sentiment)), type="l", ylab="", xlab="", main="Hamming window")
+plot_frequency_magnitudes(portrait.sentiment.hamming, title = "Filtered frequencies")
+plot_frequency_magnitudes(portrait.sentiment.hamming, rmax=20, title = "First 20 elements")
+plot(signal::blackman(length(portrait.sentiment)), type="l", ylab="", xlab="", main="Blackman window")
+plot_frequency_magnitudes(portrait.sentiment.blackman, title = "Filtered frequencies")
+plot_frequency_magnitudes(portrait.sentiment.blackman, rmax=20, title = "First 20 elements")
+par(mfcol=c(1,1))
+```
+
+The Hamming and Blackman windows seem to be isolating some of the spikes in the spectrum while merging others; behavior I don't quite understand. Whatever it is doing, it can clearly be seen in the "high resolution" frequency spectrum.
+
+```{r}
+portrait.sentiment.8x.blackman <- pad(portrait.sentiment.blackman, 8)
+```
+
+```{r,echo=FALSE}
+plot_frequency_magnitudes(portrait.sentiment.8x, rmax=450, title="Rectangular window, partial")
+plot_frequency_magnitudes(portrait.sentiment.8x.blackman, rmax=450, title="Blackman window, partial")
+```
+
+For the moment, the bottom line, as far as applying a window function, is: *Don't put that in your mouth, you don't know where it's been.*
+
+It's just as well. One thing to keep in mind with sentiment data derived from a text is that there is no noise in the system. The sentiment analysis may be *wrong*, but that would produce some kind of overall bias, not noise. The fact that the sentiment data and frequencies look noisy is likely due to the complexity of the signal.
 
 Strong frequencies
 ------------------
 
 What does the magnitude of the frequencies possibly tell us? Here's a graph of the amplitude distribution:
 
-```{r}
+```{r,echo=FALSE}
 portrait.fft <- get_fft(portrait.sentiment)
 plot(sort(Mod(portrait.fft), decreasing = T),
      type="h", main="Harmonics, sorted by amplitude", ylab="Amplitude")
 plot(sort(Mod(portrait.fft), decreasing = T)[1:100],
-     type="h", main="Higest amplitude harmonics", ylab="Amplitude")
+     type="h", main="Highest amplitude harmonics", ylab="Amplitude")
 ```
 
 The mean of the amplitudes (for harmonics > 0) is `r mean(Mod(portrait.fft[2:(length(portrait.fft))]))` and the standard deviation is `r sd(Mod(portrait.fft[2:(length(portrait.fft))]))` (not that it is very useful). The 20 highest amplitudes are in frequency bins:
@@ -178,22 +231,45 @@ inverse_fft_real <- function(frequencies) {
   return (Re(inverse_fft(frequencies)))
 }
 
-plot_specific_frequencies <- function(data, padding=0, frequencies=NULL, title="", overlay=FALSE, color="black") {
-  spectrum <- get_fft(data)
+length_unpadded <- function(data, padding=0) {
+  return (length(data) / (padding + 1))
+}
+
+get_chosen_frequencies <- function(data, time_domain=TRUE, padding=0, frequencies=NULL, rmin=1, rmax=NULL) {
+  if (time_domain) {
+    # Input is sentiment data, get spectrum; default rmax is the length of the data, minus padding
+    spectrum <- get_fft(data)
+    rmax <- if (is.null(rmax)) { length_unpadded(data, padding) } else { rmax }
+  } else {
+    # Input is spectrum; default rmax is twice the length of the data, minus padding
+    spectrum <- data
+    rmax <- if (is.null(rmax)) { 2*length_unpadded(data, padding) } else { rmax }
+  }
+  # Remove unwanted frequencies
   if (!is.null(frequencies)) {
     spectrum[-frequencies] <- 0
   }
-  len <- length(spectrum)
   ifft <- inverse_fft_real(spectrum)
+  # Remove padding, then pick out given range
+  len_unpadded <- (2*length(spectrum) - 2) / (padding + 1)
+  result <- ifft[1:len_unpadded][rmin:rmax]
+  return (result)
+}
+
+plot_specific_frequencies <- function(data, time_domain=TRUE, padding=0, frequencies=NULL, rmin=1, rmax=NULL,
+                                      title="", overlay=FALSE, color="black") {
+  result <- get_chosen_frequencies(data=data, time_domain=time_domain, padding=padding,
+                                   frequencies=frequencies, rmin=rmin, rmax=rmax)
   if (overlay) {
-    lines(ifft[1:((len*2-2)/(padding+1))], type="l", col=color)
+    lines(result, type="l", col=color)
   } else {
-    plot(ifft[1:((len*2-2)/(padding+1))], type="l", main=title, xlab="Time", ylab="Sentiment", col=color)
+    plot(result, type="l", main=title, xlab="Time", ylab="Sentiment", col=color)
   }
+  grid()
 }
 ```
 
-Filtering for specific frequencies and then plotting these in the time domain requires padding and increasing the number of frequencies selected to account for the higher frequency sampling rate.
+Filtering for specific frequencies and then plotting them in the time domain requires padding and increasing the number of strongest frequencies selected to account for the higher frequency sampling rate.
 
 ```{r}
 portrait.fft.1x <- get_frequency_magnitudes(portrait.sentiment.1x)
@@ -203,7 +279,8 @@ portrait.fft.1x[-portrait.strongest.1x] <- 0
 
 ```{r,echo=FALSE}
 plot_frequency_magnitudes(portrait.fft.1x, freq_domain = TRUE, title = "40 strongest harmonics, 1x padding", rmax = 700)
-plot_specific_frequencies(portrait.sentiment.1x, padding = 1, title = "Inverse FFT", frequencies = portrait.strongest.1x)
+plot_specific_frequencies(portrait.sentiment.1x, padding = 1, title = "40 strongest harmonics, inverse FFT",
+                          frequencies = portrait.strongest.1x)
 ```
 
 A small number of the strongest frequencies describe the overall shape of the sentiment data; the 40 strongest are shown above and the figure below shows the strongest harmonic alone, the top five, and the top 25.
@@ -223,9 +300,9 @@ legend("topleft", c("All harmonics", "Strongest harmonic", "5 strongest harmonic
        col=c("grey", "blue", "red", "violetred"), cex=.75, lty=1)
 ```
 
-Individual frequencies, however, don't necessarily give an interesting picture. But hey, it's entertaining.
+Individual frequencies, however, don't necessarily give an interesting picture. But hey, it's kind of pretty.
 
-```{r}
+```{r, echo=FALSE}
 sf <- sort(Mod(portrait.fft.1x), index.return=TRUE, decreasing=TRUE)
 plot_specific_frequencies(portrait.sentiment.1x, padding=1, frequencies = sf$ix[1], title = "Individual frequencies")
 plot_specific_frequencies(portrait.sentiment.1x, padding=1, frequencies = sf$ix[4], overlay = TRUE, color="blue")
@@ -235,47 +312,284 @@ legend("topleft", c("Strongest harmonic", "4th strongest", "15th strongest", "60
        col=c("black", "blue", "red", "green"), cex=.75, lty=1)
 ```
 
+#### Frequencies vs. padding
 
-### Window functions
+To revisit a topic discussed previously, padding has interesting effects when looking at frequencies individually or in small groups. As was noted earlier, padding
 
-So what happens when we apply a window function to the sentiment data. The simplest is the rectangular window function, which is exactly what we have been using so far. Other window functions shape the data in different ways.
+* isolates the sentiment signal in time, preventing time aliasing,
+* does not change the overall shape of the frequency spectrum when the spectrum is viewed as a whole, and
+* provides a higher sampling rate into the frequency spectrum---there are more frequency bins.
 
-```{r}
-portrait.sentiment.hamming <- portrait.sentiment * signal::hamming(length(portrait.sentiment))
-portrait.sentiment.blackman <- portrait.sentiment * signal::blackman(length(portrait.sentiment))
-```
+On the other hand, padding does change the behavior of individual frequency bins.
 
 ```{r,echo=FALSE}
-plot(portrait.sentiment.hamming, type="l", ylab="Sentiment", xlab="Time", main="Hamming window")
-plot(portrait.sentiment.blackman, type="l", ylab="Sentiment", xlab="Time", main="Blackman window")
+plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2),
+                          title="Fundamental harmonic, no padding", color="red")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=c(2),
+                          title="Fundamental harmonic, 8x padding", color="blue")
 ```
 
-The `hamming` and `blackman` functions are from the `signal` module, and produce vectors of the given size containing values suitable for multiplication.
+The wavelength of the fundamental harmonic (frequency bin 2, remember?) with no padding is `r length(portrait.sentiment)` samples, while the wavelength of the same harmonic with 8x padding is `r length(portrait.sentiment.8x)` samples, or 9 times as long. When the padding is removed so that both are the same length, the entire wave is visible in the first graph while only a portion is in the second. Also note that the amplitude is much smaller.
+
+Grouping several frequencies together boosts the amplitude into the same range, as well as recovering some of the shape.
 
 ```{r, echo=FALSE}
-par(mfcol = c(1,3))
-plot(rep(1,length(portrait.sentiment)), type="l", ylab="", xlab="", main="Rectangular window")
-plot_frequency_magnitudes(portrait.sentiment, title = "Filtered frequencies")
-plot_frequency_magnitudes(portrait.sentiment, rmax = 50, title = "First 50 elements")
-plot(signal::hamming(length(portrait.sentiment)), type="l", ylab="", xlab="", main="Hamming window")
-plot_frequency_magnitudes(portrait.sentiment.hamming, title = "Filtered frequencies")
-plot_frequency_magnitudes(portrait.sentiment.hamming, rmax=50, title = "First 50 elements")
-plot(signal::blackman(length(portrait.sentiment)), type="l", ylab="", xlab="", main="Blackman window")
-plot_frequency_magnitudes(portrait.sentiment.blackman, title = "Filtered frequencies")
-plot_frequency_magnitudes(portrait.sentiment.blackman, rmax=50, title = "First 50 elements")
-par(mfcol=c(1,1))
+plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2), color="red",
+                          title="Frequency vs. padding")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(9)+1, overlay = TRUE, color="blue")
+grid()
+legend("topleft", c("No padding, frequency 2", "8x padding, frequencies 2-10"), col=c("red", "blue"), cex=.75, lty=1)
 ```
 
-The Hamming and Blackman windows seem to be isolating some of the spikes in the spectrum while merging others; behavior I don't quite understand. Whatever it is doing, it can clearly be seen in the "high resolution" frequency spectrum.
+The same reasoning applies when selecting several frequencies.
+
+```{r, echo=FALSE}
+plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2,3), color="red",
+                          title="Frequency vs. padding")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
+grid()
+legend("topleft", c("No padding, frequencies 2,3", "8x padding, frequencies 2-19"), col=c("red", "blue"), cex=.75, lty=1)
+```
+
+A close examination (and the reason I added the grid lines) shows that the no-padding line has a circular convolution artifact: it begins and ends at the same point on the y-axis. The 8x padding line does not; the difference is slight, but present. However, the the overall shape of *A Portrait of the Artist as a Young Man*, two small hills at the beginning and ending and a deep pit in the middle, is not an artifact.
+
+A greater difference can be seen in the *Madame Bovary* plot of the same style:
 
 ```{r}
-portrait.sentiment.8x.blackman <- c(portrait.sentiment.blackman, rep(0, 8*length(portrait.sentiment.blackman)))
+bovary.sentiment <- get_sentiment(get_sentences(get_text_as_string("Madame Bovary.txt"), strip_quotes = TRUE))
+bovary.sentiment.8x <- pad(bovary.sentiment, 8)
 ```
 
 ```{r,echo=FALSE}
-plot_frequency_magnitudes(portrait.sentiment.8x, rmax=450, title="Rectangular window, partial")
-plot_frequency_magnitudes(portrait.sentiment.8x.blackman, rmax=450, title="Blackman window, partial")
+plot_specific_frequencies(bovary.sentiment, padding=0, frequencies=c(2,3), color="red",
+                          title="Frequency vs. padding: Madame Bovary")
+plot_specific_frequencies(bovary.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
+grid()
+legend("topright", c("No padding, frequencies 2,3", "8x padding, frequencies 2-19"), col=c("red", "blue"), cex=.75, lty=1)
 ```
 
-For the moment, the bottom line, as far as applying a window function, is: *Don't put that in your mouth, you don't know where it's been.*
+Yes, the amplitude for the padded version is slightly off the scale. This isn't rocket surgery, it's brain...wait, that would make sense.
 
+And with this technique, I think we have an answer to the "how much padding is needed" question: as much as you want, as long as you select a matching number of frequencies.
+
+```{r, echo=FALSE}
+plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2,3), color="red", title="Frequencies vs. padding")
+plot_specific_frequencies(portrait.sentiment.1x, padding=1, frequencies=seq(4)+1, overlay = TRUE, color="rosybrown")
+plot_specific_frequencies(portrait.sentiment.4x, padding=4, frequencies=seq(10)+1, overlay = TRUE, color="green")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
+plot_specific_frequencies(portrait.sentiment.100x, padding=100, frequencies=seq(202)+1, overlay = TRUE, color="salmon")
+grid()
+legend("topleft",
+       c("No padding, lowest 2 freq", "1x padding, 4 freq",
+         "4x padding, 10 freq", "8x padding, 18 freq", "100x padding, 202 freq"),
+       col=c("red", "rosybrown", "green", "blue", "salmon"), cex=.75, lty=1)
+```
+
+
+### Decimation
+
+A secondary goal of Syuzhet is to normalize the length of the results, for example to 100 time domain samples, in order to make comparing different books possible. The way Syuzhet does this is:
+
+* Select the lowest frequencies for output, zeroing the majority of frequency bins, and
+* drop all but 100 frequency bins, from the higher range.
+
+The inverse FFT effectively re-samples the time domain values of a function which corresponds to the frequency domain inputs to the IFFT call. As a result, removing bins in the frequency domain is not inherently problematic, assuming the frequency domain input corresponds to the original frequency domain results.
+
+`decimate_high_frequencies` removes higher frequencies so that the result has `desired` elements when converted back to the time domain and unpadded; in other words, it discards frequencies higher than $`desired` / 2$, modulo padding.
+
+```{r}
+decimate_high_frequencies <- function(frequencies, desired=100, padding=0) {
+  return (frequencies[1:(desired * (1 + padding) / 2)])
+}
+```
+
+Decimation by discarding high frequencies works well enough, if the high frequencies lost have 0 magnitude. Obviously, if there is information in the discarded frequencies, it is lost.
+
+```{r}
+portrait.fft.1x <- get_fft(portrait.sentiment.1x)
+# Remove all frequencies but the strongest 40
+portrait.strongest.1x <- which(Mod(portrait.fft.1x) >= sort(Mod(portrait.fft.1x), decreasing = T)[40])
+portrait.fft.1x[-portrait.strongest.1x] <- 0
+```
+
+```{r,echo=FALSE}
+plot_specific_frequencies(portrait.fft.1x, padding=1, time_domain=F, title="40 strongest frequencies, undecimated")
+plot_specific_frequencies(decimate_high_frequencies(portrait.fft.1x, padding=1), padding=1, time_domain=F,
+                          title="40 strongest frequencies, decimated: high frequencies")
+```
+
+One option is to decimate the sentiment data, by averaging sentiment values before the FFT.
+
+```{r}
+decimate_by_mean <- function(data, desired=100, padding=0) {
+  return ( unname(tapply(data, (seq_along(data) - 1) %/% (length(data) / (desired * (1 + padding))), mean)) )
+}
+```
+
+Unfortunately, that seems to lose as much information as discarding the higher frequencies.
+
+```{r,echo=FALSE}
+plot_specific_frequencies(portrait.sentiment.1x, padding=1, title="Undecimated")
+plot_specific_frequencies(decimate_by_mean(portrait.sentiment.1x, padding=1), padding=1, title="Decimated: by mean",
+                          col="black")
+plot_specific_frequencies(decimate_high_frequencies(get_fft(portrait.sentiment.1x), padding=1), time_domain=F,
+                          padding=1, overlay=T, col="darkgrey")
+legend("bottomright", c("Decimated by mean sentiment data", "Decimated by discarding high frequencies"),
+       col=c("black", "darkgrey"), cex=.75, lty=1)
+```
+
+By the way, `decimate_by_mean` applied to the frequency domain just does not work at all. Another thing that doesn't work at all is to compress the sequences of zeros in the spectrum to get the inverse FFT down to the desired length. (`decimate_by_zeros` is also bad R style, too.)
+
+```{r}
+decimate_by_zeros <- function(data, padding=0, desired=100) {
+  rle <- rle(data)
+  lnz <- length(which(rle$values != 0))
+  lz <- length(data) - lnz
+  lr <- (desired * (1 + padding) / 2) - lnz
+  result <- c()
+  for (i in seq(rle$values)) {
+    if (rle$values[i] != 0) {
+      result <- c(result, rep(rle$values[i], rle$lengths[i]))
+    } else {
+      len <- as.integer(rle$lengths[i] / lz * lr + 0.5)
+      result <- c(result, rep(0, len))
+    }
+  }
+  result <- c(result, rep(0, (desired * (1 + padding) / 2) - length(result)))
+  return (result)
+}
+```
+
+```{r,echo=FALSE}
+plot_specific_frequencies(decimate_high_frequencies(portrait.fft.1x, padding=1), time_domain=F, padding=1,
+                          title="Decimated badly")
+plot_specific_frequencies(50*decimate_by_mean(portrait.fft.1x, padding=1, desired=50), time_domain=F, padding=1,
+                          overlay=T, col="red")
+plot_specific_frequencies(decimate_by_zeros(portrait.fft.1x, padding=1), time_domain=F, padding=1, overlay=T, col="blue")
+legend("bottomright",
+       c("Decimated by discarding high frequencies",
+         "Decimated by mean in freq. domain",
+         "Decimated by compressing zeros in freq. domain"),
+       col=c("black", "red", "blue"), cex=.75, lty=1)
+```
+
+How does decimating the results with `decimate_by_mean` compare to decimating the input?
+
+```{r}
+plot_specific_frequencies(decimate_by_mean(portrait.sentiment.1x, padding=1), padding=1,
+                          title="Decimated: by mean", col="blue")
+lines(decimate_by_mean(get_chosen_frequencies(portrait.sentiment.1x, padding=1), padding=0), type="l", col="red")
+legend("bottomleft", c("Decimated before processing", "Decimated after processing"), col=c("blue","red"), cex=.75, lty=1)
+```
+
+They're identical. Convenient.
+
+Anthology
+---------
+
+*Lord Arthur Savile's Crime and other stories* is a collection of five short stories by Oscar Wilde, with the second and third to last being very short in comparison to the others.
+
+```{r}
+savile.sentences <- get_sentences(get_text_as_string("Lord Arthur Savile's Crime.txt"), strip_quotes = TRUE)
+savile.sentiment <- get_sentiment(savile.sentences)
+savile.stories <- c(14,650,1055,1191,1320,length(savile.sentiment))
+```
+
+The plot below shows the overall sentiment data of the book, with red lines indicating the breaks between stories.
+
+```{r, echo=FALSE}
+plot_specific_frequencies(pad(savile.sentiment,4), padding=4, title = "Lord Arthur Savile's Crime and other stories")
+abline(v=savile.stories, col="red")
+```
+
+Here's a question: does the periodic ending of one story and the beginning of another show up in the frequency domain? Theoretically, there should be something around the 5th frequency bin, given that there are three longer stories and two that combined are shorter than any of the others. More precisely, that might be an average length of 
+$((650-14) + (1055 - 650) + (1320 - 1055) + (`r length(savile.sentiment)` - 1320)) / 4$ or
+`r (-14 + length(savile.sentiment)) / 4` sentences, or
+`r length(savile.sentiment) / ((-14 + length(savile.sentiment)) / 4)` cycles per the length of the text.
+
+```{r, echo=FALSE}
+plot_frequency_magnitudes(savile.sentiment, title="Lord Arthur Savile's Crime and other stories")
+```
+
+Hmm. What is that big peak just off 0?
+
+```{r, echo=FALSE}
+plot_frequency_magnitudes(savile.sentiment, rmax = 50, title="Lord Arthur Savile's Crime and other stories")
+```
+
+Possibly a little too high, at 10, which would be 9 cycles per text. What does that look like in the time domain?
+
+```{r,echo=FALSE}
+plot_specific_frequencies(savile.sentiment,, title = "10th harmonic", col="grey")
+plot_specific_frequencies(savile.sentiment*5, frequencies = c(10), overlay=T, col="blue")
+abline(v=savile.stories, col="red")
+```
+
+Interesting, but inconclusive. After some additional poking around, I cannot find any mixture of strong frequencies that would obviously pick out the breaks between stories. I was really hoping I would. Maybe I should just go read "The Portrait of Mr. W. H." again.
+
+Before I do, though, here are the raw frequency spectrums of each of the individual stories.
+
+```{r, echo=FALSE}
+par(mfrow=c(1,3))
+plot_frequency_magnitudes(savile.sentiment[14:650], title="Lord Arthur Savile's Crime")
+plot_frequency_magnitudes(savile.sentiment[650:1055], title="The Canterville Ghost")
+plot_frequency_magnitudes(savile.sentiment[1055:1191], title="The Sphinx Without a Secret")
+par(mfrow=c(1,2))
+plot_frequency_magnitudes(savile.sentiment[1191:1320], title="The Model Millionaire")
+plot_frequency_magnitudes(savile.sentiment[1320:length(savile.sentiment)], title="The Portrait of Mr. W. H.")
+par(mfrow=c(1,1))
+```
+
+It's not entirely unexpected that "The Sphinx Without a Secret" and "The Model Millionaire" don't look like a normal frequency plot, but "The Canterville Ghost" is also different.
+
+And here are the Syuzhet-style plots of *Savile* overall as well as the individual stories. It's interesting to compare the overall line with the lines from each individual story; except for the two very short stories, the story's line sort-of-kinda follows the line from the overall graph.
+
+```{r, echo=FALSE}
+plot_specific_frequencies(pad(savile.sentiment, 4), padding=4,
+                          title = "Lord Arthur Savile's Crime and other stories", col="grey")
+plot_specific_frequencies(15*pad(savile.sentiment, 4), padding=4, frequencies=seq(15),
+                          overlay=T, col="black")
+abline(v=savile.stories, col="red")
+par(mfrow=c(2,3))
+plot_specific_frequencies(pad(savile.sentiment[14:650], 2), padding=2, frequencies=seq(9),
+                          title="Lord Arthur Savile's Crime")
+plot_specific_frequencies(pad(savile.sentiment[650:1055], 2), padding=2, frequencies=seq(9),
+                          title="The Canterville Ghost")
+plot_specific_frequencies(pad(savile.sentiment[1055:1191], 2), padding=2, frequencies=seq(9),
+                          title="The Sphinx Without a Secret")
+plot_specific_frequencies(pad(savile.sentiment[1191:1320], 2), padding=2, frequencies=seq(9),
+                          title="The Model Millionaire")
+plot_specific_frequencies(pad(savile.sentiment[1320:length(savile.sentiment)], 2), padding=2, frequencies=seq(9),
+                          title="The Portrait of Mr. W. H.")
+par(mfrow=c(1,1))
+```
+
+And now for something completely different
+-----------------------------------------
+
+Let's just say this is an experiment in non-fiction and leave it at that.
+
+```{r}
+potato.sentences <- get_sentences(get_text_as_string("Essay on the Potato.txt"), strip_quotes = TRUE)
+potato.sentiment <- get_sentiment(potato.sentences)
+```
+
+```{r,echo=FALSE}
+plot_frequency_magnitudes(potato.sentiment, title="The $100 Prize Essay on the Cultivation of the Potato by D.A. Compton")
+plot_frequency_magnitudes(potato.sentiment, title="The Essay on the Potato", rmax=50)
+```
+
+```{r,echo=FALSE}
+plot_specific_frequencies(potato.sentiment, title="The Essay on the Potato", col="grey")
+plot_specific_frequencies(8*pad(potato.sentiment,2), padding=2, frequencies=seq(9),
+                          overlay=T, col="blue")
+```
+
+I'm almost positive that means something.
+
+Conclusions
+-----------
+
+* The information content in a text occurs in the time domain. This is unlike other common DSP uses, say, audio, where the information is actually held in the frequency domain.
+  * Phase information in the frequency domain is important; it determines the location of events in the time domain. Audio
+    processing apparently assumes the phase in formation is irrelevant.
