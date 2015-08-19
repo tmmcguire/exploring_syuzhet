@@ -2,7 +2,9 @@
 title: "Prodding the Frequency Domain"
 author: "Tommy M. McGuire"
 date: "08/14/2015"
-output: html_document
+output:
+  html_document:
+    toc: yes
 ---
 
 Following up on my previous excursion into R, I am going to take a closer look at *A Portrait of the Artist as a Young Man*, in both the time and frequency domains, in order to get a better handle on how the frequency domain of a book works.
@@ -72,17 +74,22 @@ get_frequency_phases <- function(data) {
 And some functions to plot them.
 
 ```{r}
-plot_frequency_magnitudes <- function(data, freq_domain = FALSE, rmin=1, rmax=length(data), title="", log="") {
+plot_frequency_magnitudes <- function(data, freq_domain = FALSE, rmin=1, rmax=length(data),
+                                      title="", overlay=FALSE, color="black") {
   if (!freq_domain) {
     data <- get_frequency_magnitudes(data)
   }
-  plot(data[rmin:rmax], type="h", xlab="Harmonic", ylab="Amplitude", main=title, log=log)
+  if (overlay) {
+    lines(data[rmin:rmax], type="h", col=color)  
+  } else {
+    plot(data[rmin:rmax], type="h", xlab="Harmonic", ylab="Amplitude", main=title, col=color)  
+  }
   lines(data[rmin:rmax])
   grid()
 }
 ```
 
-Here is the frequency spectrum of *A Portrait of the Artist as a Young Man*:
+Here is the frequency spectrum of *A Portrait of the Artist as a Young Man*, along with a moving average line:
 
 ```{r, echo=FALSE}
 plot_frequency_magnitudes(portrait.sentiment, title="A Portrait of the Artist as a Young Man")
@@ -91,7 +98,10 @@ grid()
 legend("topright", c("Raw magnitudes", "501 element moving average"), col=c("black","red"), cex=0.75, lty=1)
 ```
 
-and here are the lowest harmonics:
+An important property of the amplitudes of each frequency is that lower frequencies should be stronger than higher
+frequencies, for Suyzhet's analysis to be anywhere close to valid. In this case, it looks like it is.
+
+Here are the lowest harmonics:
 
 ```{r,echo=FALSE}
 plot_frequency_magnitudes(portrait.sentiment, rmax=50, title="Frequency samples 1:50")
@@ -115,7 +125,7 @@ portrait.sentiment.8x <-   pad(portrait.sentiment, 8)
 portrait.sentiment.100x <- pad(portrait.sentiment, 100)
 ```
 
-What I have done in the next six graphs is to increase the padding from nothing to 100 times the length of the original data, then graphed the same region of the frequency spectrum: the first 50 frequency bins for the first graph and the first 450 (i.e. $50 * (8 + 1)$) bins for the 8x graph.
+What I have done in the next six graphs is to increase the padding from nothing to 100 times the length of the original data, then graphed the same region of the frequency spectrum: the first 50 frequency bins for the first graph and the first 450 (i.e. $50 \times\ (8 + 1)$) bins for the 8x graph.
 
 ```{r, echo=FALSE}
 plot_frequency_magnitudes(portrait.sentiment,      rmax=50,     title="No padding")
@@ -140,6 +150,7 @@ plot_frequency_magnitudes(portrait.sentiment.8x,   title="8x padding")
 ```
 
 Although the amplitudes differ, the shape of the spectrum remains the same.
+
 
 ### Window functions
 
@@ -294,8 +305,6 @@ plot_specific_frequencies(portrait.sentiment.1x, padding=1, color="red", overlay
                           frequencies=which(Mod(portrait.fft.1x) >= sort(Mod(portrait.fft.1x), decreasing = T)[5]))
 plot_specific_frequencies(portrait.sentiment.1x, padding=1, color="violetred", overlay = TRUE,
                           frequencies=which(Mod(portrait.fft.1x) >= sort(Mod(portrait.fft.1x), decreasing = T)[25]))
-# plot_specific_frequencies(portrait.sentiment.1x, padding=1, color="darkolivegreen", overlay = TRUE,
-#                           frequencies=which(Mod(portrait.fft.1x) >= sort(Mod(portrait.fft.1x), decreasing = T)[125]))
 legend("topleft", c("All harmonics", "Strongest harmonic", "5 strongest harmonics", "25 strongest harmonics"),
        col=c("grey", "blue", "red", "violetred"), cex=.75, lty=1)
 ```
@@ -334,21 +343,23 @@ The wavelength of the fundamental harmonic (frequency bin 2, remember?) with no 
 Grouping several frequencies together boosts the amplitude into the same range, as well as recovering some of the shape.
 
 ```{r, echo=FALSE}
+plot_frequency_magnitudes(portrait.sentiment, rmin=1, rmax=10, title="Frequency vs. no padding")
+plot_frequency_magnitudes(9*portrait.sentiment.8x, rmin=1, rmax=90, title="Frequency vs 8x padding")
+
 plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2), color="red",
                           title="Frequency vs. padding")
-plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(9)+1, overlay = TRUE, color="blue")
-grid()
-legend("topleft", c("No padding, frequency 2", "8x padding, frequencies 2-10"), col=c("red", "blue"), cex=.75, lty=1)
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(8)+8, overlay = TRUE, color="blue")
+legend("top", c("No padding, frequency 2", "8x padding, frequencies 10-18"), col=c("red", "blue"), cex=.75, lty=1)
 ```
 
 The same reasoning applies when selecting several frequencies.
 
 ```{r, echo=FALSE}
-plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2,3), color="red",
+plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(1,2,3), color="red",
                           title="Frequency vs. padding")
-plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(24), overlay = TRUE, color="blue")
 grid()
-legend("topleft", c("No padding, frequencies 2,3", "8x padding, frequencies 2-19"), col=c("red", "blue"), cex=.75, lty=1)
+legend("topleft", c("No padding, frequencies 1-3", "8x padding, frequencies 1-24"), col=c("red", "blue"), cex=.75, lty=1)
 ```
 
 A close examination (and the reason I added the grid lines) shows that the no-padding line has a circular convolution artifact: it begins and ends at the same point on the y-axis. The 8x padding line does not; the difference is slight, but present. However, the the overall shape of *A Portrait of the Artist as a Young Man*, two small hills at the beginning and ending and a deep pit in the middle, is not an artifact.
@@ -361,25 +372,29 @@ bovary.sentiment.8x <- pad(bovary.sentiment, 8)
 ```
 
 ```{r,echo=FALSE}
-plot_specific_frequencies(bovary.sentiment, padding=0, frequencies=c(2,3), color="red",
+plot_frequency_magnitudes(bovary.sentiment, title = "Madame Bovary")
+lines(filter(get_frequency_magnitudes(bovary.sentiment), filter=rep(1/201,201)), col="red", lwd=3)
+legend("topright", c("Raw frequencies", "201 element moving average"), col=c("black", "red"), cex=.75, lty=1)
+
+plot_specific_frequencies(bovary.sentiment.8x, padding=8, frequencies=seq(24), color="blue",
                           title="Frequency vs. padding: Madame Bovary")
-plot_specific_frequencies(bovary.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
+plot_specific_frequencies(bovary.sentiment, padding=0, frequencies=c(1,2,3), color="red", overlay = TRUE)
 grid()
-legend("topright", c("No padding, frequencies 2,3", "8x padding, frequencies 2-19"), col=c("red", "blue"), cex=.75, lty=1)
+legend("topright", c("No padding, frequencies 1-3", "8x padding, frequencies 1-24"), col=c("red", "blue"), cex=.75, lty=1)
 ```
 
-Yes, the amplitude for the padded version is slightly off the scale. This isn't rocket surgery, it's brain...wait, that would make sense.
+Yes, the amplitude for the unpadded version is slightly off the scale. This isn't rocket surgery, it's brain...wait, that would make sense.
 
 And with this technique, I think we have an answer to the "how much padding is needed" question: as much as you want, as long as you select a matching number of frequencies.
 
 ```{r, echo=FALSE}
 plot_specific_frequencies(portrait.sentiment, padding=0, frequencies=c(2,3), color="red", title="Frequencies vs. padding")
 plot_specific_frequencies(portrait.sentiment.1x, padding=1, frequencies=seq(4)+1, overlay = TRUE, color="rosybrown")
-plot_specific_frequencies(portrait.sentiment.4x, padding=4, frequencies=seq(10)+1, overlay = TRUE, color="green")
-plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(18)+1, overlay = TRUE, color="blue")
-plot_specific_frequencies(portrait.sentiment.100x, padding=100, frequencies=seq(202)+1, overlay = TRUE, color="salmon")
+plot_specific_frequencies(portrait.sentiment.4x, padding=4, frequencies=seq(10)+4, overlay = TRUE, color="green")
+plot_specific_frequencies(portrait.sentiment.8x, padding=8, frequencies=seq(18)+8, overlay = TRUE, color="blue")
+plot_specific_frequencies(portrait.sentiment.100x, padding=100, frequencies=seq(202)+100, overlay = TRUE, color="salmon")
 grid()
-legend("topleft",
+legend("bottomright",
        c("No padding, lowest 2 freq", "1x padding, 4 freq",
          "4x padding, 10 freq", "8x padding, 18 freq", "100x padding, 202 freq"),
        col=c("red", "rosybrown", "green", "blue", "salmon"), cex=.75, lty=1)
@@ -462,7 +477,7 @@ decimate_by_zeros <- function(data, padding=0, desired=100) {
 
 ```{r,echo=FALSE}
 plot_specific_frequencies(decimate_high_frequencies(portrait.fft.1x, padding=1), time_domain=F, padding=1,
-                          title="Decimated badly")
+                          title="Decimated, badly")
 plot_specific_frequencies(50*decimate_by_mean(portrait.fft.1x, padding=1, desired=50), time_domain=F, padding=1,
                           overlay=T, col="red")
 plot_specific_frequencies(decimate_by_zeros(portrait.fft.1x, padding=1), time_domain=F, padding=1, overlay=T, col="blue")
@@ -521,7 +536,7 @@ Possibly a little too high, at 10, which would be 9 cycles per text. What does t
 
 ```{r,echo=FALSE}
 plot_specific_frequencies(savile.sentiment,, title = "10th harmonic", col="grey")
-plot_specific_frequencies(savile.sentiment*5, frequencies = c(10), overlay=T, col="blue")
+plot_specific_frequencies(pad(savile.sentiment,2)*5, frequencies = seq(2)+26, overlay=T, col="blue")
 abline(v=savile.stories, col="red")
 ```
 
@@ -542,7 +557,7 @@ par(mfrow=c(1,1))
 
 It's not entirely unexpected that "The Sphinx Without a Secret" and "The Model Millionaire" don't look like a normal frequency plot, but "The Canterville Ghost" is also different.
 
-And here are the Syuzhet-style plots of *Savile* overall as well as the individual stories. It's interesting to compare the overall line with the lines from each individual story; except for the two very short stories, the story's line sort-of-kinda follows the line from the overall graph.
+And here are the Syuzhet-style plots of *Savile* overall as well as the individual stories. Compare the overall line with the lines from each individual story: except for the two very short stories, the story's line sort-of-kinda follows the line from the overall graph.
 
 ```{r, echo=FALSE}
 plot_specific_frequencies(pad(savile.sentiment, 4), padding=4,
@@ -580,12 +595,12 @@ plot_frequency_magnitudes(potato.sentiment, title="The Essay on the Potato", rma
 ```
 
 ```{r,echo=FALSE}
-plot_specific_frequencies(potato.sentiment, title="The Essay on the Potato", col="grey")
-plot_specific_frequencies(8*pad(potato.sentiment,2), padding=2, frequencies=seq(9),
+plot_specific_frequencies(potato.sentiment, title="The Essay on the Potato: Syuzhetish", col="grey")
+plot_specific_frequencies(8*pad(potato.sentiment,3), padding=3, frequencies=seq(12),
                           overlay=T, col="blue")
 ```
 
-I'm almost positive that means something.
+I'm almost positive that means something. The "Potato in a Hole" plot?
 
 Conclusions
 -----------
@@ -593,3 +608,21 @@ Conclusions
 * The information content in a text occurs in the time domain. This is unlike other common DSP uses, say, audio, where the information is actually held in the frequency domain.
   * Phase information in the frequency domain is important; it determines the location of events in the time domain. Audio
     processing apparently assumes the phase in formation is irrelevant.
+
+* The lowest frequencies have greater magnitudes, slightly. This is important, if those lower frequencies are telling us anything about the structure of the book.
+  * The lowest frequency, however, is pretty irrelevent except in that it sets the overall level of the sentiment graph.
+
+* Padding the sentiment data with zeros does not change the shape of the frequency spectrum, although it does increase the frequency resolution.
+  * The increased frequency resolution means that recovering the same amount of information as a single selected frequency with less padding requires selecting multiple frequencies with more padding.
+
+* Padding also reduces the effects of time aliasing when using an inverse FFT.
+  * When picking out a very small number of frequencies, say 2 and using more than 1x padding, the resulting graphs converge to roughly the same shape. Extra padding may be good, but not necessary.
+
+* Decimating the frequency spectrum by dropping higher frequencies is fine, as long as those frequencies are 0 after filtering. Other decimation techniques are not so great.
+
+* Disappointingly, as far as I can tell from one example, the frequency spectrum of an anthology doesn't seem much different than a novel.
+
+* On the other hand, again from one example, a non-fiction text displays much less high-frequency variation.
+
+* Potatos are easy to grow, good for you, and very tasty.
+  * So is RStudio.
