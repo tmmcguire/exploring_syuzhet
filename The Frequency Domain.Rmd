@@ -7,6 +7,8 @@ output:
     toc: yes
 ---
 
+[The RStudio project for this document lives at [exploring_syuzhet](https://github.com/tmmcguire/exploring_syuzhet). The HTML version of this document is too big or spiffy or something for Blogger; this should live on [Maniagnosis](http://maniagnosis.crsr.net/).]
+
 Following up on my previous excursion into R, I am going to take a closer look at *A Portrait of the Artist as a Young Man*, in both the time and frequency domains, in order to get a better handle on how the frequency domain of a book works.
 
 ```{r}
@@ -109,7 +111,7 @@ plot_frequency_magnitudes(portrait.sentiment, rmax=50, title="Frequency samples 
 
 This is an interesting view to use to investigate the changes when the data is padded with zeros.
 
-### Padding
+## Padding
 
 Padding adds zero elements to the end of the array; I am measuring the amount of padding in terms of the length of the original sentiment data: 1x indicates the sentiment data followed by the same number of zeros; 2x, the sentiment data followed by twice as many zeros.
 
@@ -152,7 +154,7 @@ plot_frequency_magnitudes(portrait.sentiment.8x,   title="8x padding")
 Although the amplitudes differ, the shape of the spectrum remains the same.
 
 
-### Window functions
+## Window functions
 
 One option for analyzing the frequency spectrum is to smooth the harmonics with window functions. What happens when we apply a window function to the sentiment data? The simplest is the rectangular window function, which is exactly what we have been using so far. Other window functions shape the data in different ways.
 
@@ -321,7 +323,7 @@ legend("topleft", c("Strongest harmonic", "4th strongest", "15th strongest", "60
        col=c("black", "blue", "red", "green"), cex=.75, lty=1)
 ```
 
-#### Frequencies vs. padding
+## Frequencies vs. padding
 
 To revisit a topic discussed previously, padding has interesting effects when looking at frequencies individually or in small groups. As was noted earlier, padding
 
@@ -401,7 +403,7 @@ legend("bottomright",
 ```
 
 
-### Decimation
+## Decimation
 
 A secondary goal of Syuzhet is to normalize the length of the results, for example to 100 time domain samples, in order to make comparing different books possible. The way Syuzhet does this is:
 
@@ -626,3 +628,5 @@ Conclusions
 
 * Potatos are easy to grow, good for you, and very tasty.
   * So is RStudio.
+
+The source for this document is on github at [exploring_syuzhet](https://github.com/tmmcguire/exploring_syuzhet). The blog is [Maniagnosis](http://maniagnosis.crsr.net/).

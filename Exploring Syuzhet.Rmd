@@ -376,8 +376,6 @@ legend("topleft", c("Raw spectrum", "51 sample moving average"), col=c("black", 
 
 The biggest amplitudes are at low frequencies, but some (or many, depending on how you look at it) higher frequencies also have significant amplitudes. The left-most column is of frequency 1: it makes one peak-to-trough-to-peak cycle in the length of `portrait.sentiment`. (I'm simplifying there; the phase value specifies *where* in the waveform the wave starts in the sample; it may be trough-to-peak-to-trough or some other form) The next column is of frequency 2: two cycles in the length of the input. The third column is of frequency 3: three cycles, and so forth. The right-most column is the highest frequency, which (because the data is one sentence per sample) represents one cycle per two sentences (and there's the Nyquist limit).
 
-One other point to make is that if the filter in the frequency domain adds up to something other than 1, the result is gain or loss. Less than one dials the amplitude down, greater than one dials it up. The filter `c(1,1,1,0,...)` produces a strong gain; I do not know if this is desired or not. For me, however, I am a big fan of not doing anything that isn't specifically needed (actually, I'm a big fan of not doing anything at all), so the filter should probably be normalized to sum to one.
-
 Where does all this leave us?
 -----------------------------
 
@@ -393,8 +391,8 @@ get_transformed_values2 <- function(raw_values,
   if(low_pass_size > length(raw_values)) stop("low_pass_size ... length of raw_values input vector")
   # Normalization factor
   values_fft <- fft(raw_values) / length(raw_values)
-  # Avoid gain/loss
-  keepers <- values_fft[1:low_pass_size] / low_pass_size
+  # Pick out the interesting frequencies
+  keepers <- values_fft[1:low_pass_size]
   # Preserve frequency domain structure
   padded_keepers <- c(keepers, rep(0, x_reverse_len - (2*low_pass_size) + 1), rev(Conj( keepers[2:(length(keepers))] )))
   inverse_values <- fft(padded_keepers, inverse=T)
@@ -430,17 +428,18 @@ Here is another example text, *Madame Bovary*.
 bovary.string <- get_text_as_string("Madame Bovary.txt")
 bovary.sentiment <- get_sentiment(get_sentences(bovary.string,strip_quotes=T))
 plot(bovary.sentiment, type="l", col="grey", main="Madame Bovary", ylab="Emotional Valence", xlab="Plot Time")
-lines(scale(filter(bovary.sentiment,filter=rep(1/501,501),sides=2)), type="l", col="red")
-lines(get_transformed_values2(bovary.sentiment, x_reverse_len=length(bovary.sentiment), scale_vals=T),
+lines(3*scale(filter(bovary.sentiment,filter=rep(1/501,501),sides=2)), type="l", col="red")
+lines(3*get_transformed_values2(bovary.sentiment, x_reverse_len=length(bovary.sentiment), scale_vals=T),
       type="l", col="blue")
-legend("topleft", c("501 sample moving average", "Syuzhet"), col=c("red", "blue"), cex=.75, lty=1)
+legend("topleft", c("501 sample moving average, not to scale", "Syuzhet, not to scale"), col=c("red", "blue"),
+       cex=.75, lty=1)
 ```
 
-This thing is what we in the business like to call a *problem*. According to the moving average and people who have read the book, *Bovary* does not have a cheery, upbeat ending. The moving average has its ups and downs, but it is generally declining from left to right. On the other hand, the Syuzhet curve is simply wrong. Notice that the right end of the Syuzhet curve bends upward. In fact, it rises to the same level of the curve on the left edge.
+This thing is what we in the business like to call a *problem*. According to the moving average, Wikipedia, and people who have read the book, *Bovary* does not have a cheery, upbeat ending. The moving average has its ups and downs, but it is generally declining from left to right. On the other hand, the Syuzhet curve is simply wrong. Notice that the right end of the Syuzhet curve bends upward. In fact, it rises to the same level of the curve on the left edge.
 
 The Syuzhet curve has to meet at left and right, by the manner that the Fourier transform treats its data. The input of the transform and output of the inverse transform are assumed to be periodic repeating, so in effect the right edge of the graph should be followed immediately by the left edge of a subsequent, identical graph. (*Bovary* is one of the best examples I found of this sort of behavior, but much of the discussion of Syuzhet focused on similar behaviors in other books, including *Portrait*.)
 
-The specific problem seems to go by the name of a "circular convolution artifact" or "time aliasing", rather than the more general "ringing" which may be related but was the term under which most of the discussion of the behavior of the DFT occurred.
+The specific problem seems to go by the name of a "circular convolution artifact" or "time aliasing", rather than "ringing" which may be related but was the term under which most of the discussion of the behavior of the DFT occurred.
 
 Everyone likes factoids, right? I like factoids. Here is the [**Primary Factoid of Digital Signal Processing**](https://en.wikipedia.org/wiki/Convolution_theorem):
 
@@ -460,7 +459,7 @@ If you do the first (which is, after all, what the DFT and signal processing in 
 
 What happens is that the inputs and outputs needed for the *final* values are taken from the *beginning* of the data, and vice-versa, so the end data is added to the beginning (and vice-versa), leaving completely useless values that also force the alignment of the line.
 
-In more mathematical terms for DFT convolution, if `bovary.sentiment` is of length $N$ and the convolution kernel (call it `h`) is of length $M$, then the length of the result and the length of the necessary input data is $N+M-1$. But `get_transformed_values` is using an input data and result size of $N$, so naturally the extra data necessary is drawn from the next or previous period and the extra results are added to the existing results in the edge cases.
+In more mathematical terms, if `bovary.sentiment` is of length $N$ and the convolution kernel (call it `h`) is of length $M$, then the length of the result and the length of the necessary input data is $N+M-1$. But `get_transformed_values` is using an input data and result size of $N$, so naturally the extra data necessary is drawn from the next or previous period and the extra results are added to the existing results in the edge cases.
 
 Fortunately, [padding data with zeros](http://dsp.stackexchange.com/questions/741/why-should-i-zero-pad-a-signal-before-taking-the-fourier-transform) is apparently a fairly common thing to do in DSP circles. In fact, it is so safe as far as not mangling the data as to be used to increase the size of the data in order to use a more efficient FFT algorithm.
 
@@ -468,7 +467,7 @@ Fixing `get_transformed_values` doesn't sound hard, if we know how to do this wh
 
 The first problem is where to put the padding. Putting extra 0s in the middle of the sentiment data doesn't sound like a good idea as that seems like it would hoark up our signal. So we are limited to putting it before the sentiment data, after the sentiment data, or surrounding the sentiment data on both sides.
 
-Here's a neat thing: Because everything DFTish is treated as periodic, or circular, it doesn't matter where we put the padding. Putting the padding at the beginning is the same as putting it at the end or splitting it into two parts. Putting the padding 0s after the end of the input samples is a bit easier to manage when it comes time to remove the padding, so that is what I'll do.
+Here's a neat thing: Because everything DFTish is treated as periodic or circular, it doesn't matter where we put the padding. Putting the padding at the beginning is the same as putting it at the end or splitting it into two parts. Putting the padding 0s after the end of the input samples is a bit easier to manage when it comes time to remove the padding, so that is what I'll do.
 
 Next question: how much padding do we need?
 
@@ -649,8 +648,8 @@ get_transformed_values3 <- function(raw_values,
   padding.len = raw_values.len * padding_factor
   # Add padding, fft, and normalize
   values_fft <- fft( c(raw_values, rep(0, padding.len)) ) / (raw_values.len + padding.len)
-  # Avoid gain/loss while filtering by c(1,1,1,0...)
-  keepers <- values_fft[1:low_pass_size] / low_pass_size
+  # Filter by c(1,1,1,...,0,...)
+  keepers <- values_fft[1:low_pass_size]
   # Preserve frequency domain structure
   modified_spectrum <- c(keepers,
                          rep(0, (x_reverse_len * (1+padding_factor)) - (2*low_pass_size) + 1),
@@ -812,3 +811,5 @@ The source for this document is on github at [exploring_syuzhet](https://github.
 As originally posted, this article did not correctly attribute the cool story in the conclusion. It does now.
 
 I have sprinkled some more precision on the discussion of the structure of the output of `fft`.
+
+I was completely wrong about the necessity for adjusting the gain of the ideal low pass filter.
