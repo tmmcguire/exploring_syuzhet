@@ -69,9 +69,11 @@ get_frequency_magnitudes <- function(data) {
 }
 
 get_frequency_phases <- function(data) {
-  return (Arg(get_fft(data)))
+  return (signal::unwrap(Arg(get_fft(data))))
 }
 ```
+
+`get_frequency_phases` requires some explanation. The raw phase values are between -pi and pi radians, meaning that a continually decreasing value (over frequency) will appear to oscillate in that range. `signal::unwrap` "unwraps" the phases " by adding multiples of 2*pi as appropriate to remove jumps". 
 
 And some functions to plot them.
 
@@ -99,6 +101,14 @@ lines(filter(get_frequency_magnitudes(portrait.sentiment), filter=rep(1/501,501)
 grid()
 legend("topright", c("Raw magnitudes", "501 element moving average"), col=c("black","red"), cex=0.75, lty=1)
 ```
+
+And here are the unwrapped phases.
+
+```{r,echo=FALSE}
+plot(get_frequency_phases(portrait.sentiment), ylab="Phase", xlab="Harmonic", type="l", main="Frequency domain phases")
+```
+
+There does appear to be some structure to the phases in the frequency domain, but I don't know what it means and have not been able to find much about phase structure.
 
 An important property of the amplitudes of each frequency is that lower frequencies should be stronger than higher
 frequencies, for Suyzhet's analysis to be anywhere close to valid. In this case, it looks like it is.
@@ -153,6 +163,18 @@ plot_frequency_magnitudes(portrait.sentiment.8x,   title="8x padding")
 
 Although the amplitudes differ, the shape of the spectrum remains the same.
 
+On the other hand, adding padding has a drastic effect on the phases in the frequency domain.
+
+```{r,echo=FALSE}
+plot(get_frequency_phases(portrait.sentiment.1x)[1:(length(portrait.sentiment)/2)], col="red",
+     ylab="Phase", yaxt="n", xlab="Harmonic", type="l", main="Frequency domain phases")
+lines((get_frequency_phases(portrait.sentiment) * 10) - 500, col="blue")
+legend("bottomleft", c("Phases of unpadded data, scaled and shifted",
+                       "Phases with 1x padding, partial"),
+       col=c("blue", "red"), cex=.75, lty=1)
+```
+
+*All* of the phases of padded sentiment data I have looked at have had essentially the same plot, upper left to lower right. I have no idea what it means.
 
 ## Window functions
 
